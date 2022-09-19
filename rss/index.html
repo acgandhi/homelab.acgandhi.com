@@ -1,0 +1,548 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title><![CDATA[Tanzu Personal Homelab]]></title><description><![CDATA[Standing up self-hosted F/OSS alternatives to common cloud services on kubernetes.]]></description><link>https://homelab.acgandhi.com/</link><image><url>https://homelab.acgandhi.com/favicon.png</url><title>Tanzu Personal Homelab</title><link>https://homelab.acgandhi.com/</link></image><generator>Ghost 5.4</generator><lastBuildDate>Sun, 18 Sep 2022 22:32:01 GMT</lastBuildDate><atom:link href="https://homelab.acgandhi.com/rss/" rel="self" type="application/rss+xml"/><ttl>60</ttl><item><title><![CDATA[Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)]]></title><description><![CDATA[<p>Home automation is one of the key focuses of my project, as it&apos;s one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It&apos;s also unusual to see Kubernetes handling this; most k8s demos tend</p>]]></description><link>https://homelab.acgandhi.com/post-6-home-automation/</link><guid isPermaLink="false">62fdac518b7a36007d01f3c3</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Sun, 18 Sep 2022 09:04:15 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/08/Z-Wave_logo.svg" medium="image"/><content:encoded><![CDATA[<img src="https://homelab.acgandhi.com/content/images/2022/08/Z-Wave_logo.svg" alt="Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)"><p>Home automation is one of the key focuses of my project, as it&apos;s one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It&apos;s also unusual to see Kubernetes handling this; most k8s demos tend to be a bit more focused on webservers or enterprise software.</p><p>For my lab I&apos;ll be using a <strong>Z-Wave USB dongle</strong> to communicate with Z-Wave smart devices. The stick is plugged into a <strong>Raspberry Pi</strong>, which will talk via <strong>MQTT </strong>to <strong>Home Assistant</strong> running on Kubernetes, an application which provides an easy to use web dashboard. The setup is summed up by this diagram:</p><figure class="kg-card kg-image-card"><img src="https://homelab.acgandhi.com/content/images/2022/08/zwave-diagram.svg" class="kg-image" alt="Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)" loading="lazy"></figure><h2 id="setting-up-the-raspberry-pi">Setting up the Raspberry pi</h2><!--kg-card-begin: html--><ol start="1">
+    <li>Set up the Raspberry Pi with an OS of your choice. In my case I&apos;m using <a href="https://ubuntu.com/raspberry-pi/server">Ubuntu Server for Raspberry Pi</a>. Set the server to use a static IP, and optionally you can also set up a DNS resolver entry for the Pi in your router.</li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="2">
+    <li>Install Docker on the Pi. You can do so easily with the following script (Ubuntu specific, for <a href="https://docs.docker.com/engine/install/#server">other distros see the docker website</a>):</li>
+</ol><!--kg-card-end: html--><pre><code class="language-bash"># Remove old docker if it exists
+sudo apt-get remove docker docker-engine docker.io containerd runc
+# Update dependencies
+sudo apt update
+sudo apt install -y apt-transport-https ca-certificates curl gnupg software-properties-common
+# Docker repo key
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  &quot;deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable&quot; | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
+# Install Docker latest runtime
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli docker-compose-plugin
+# Add current user to docker group (so you can use docker without sudo)
+sudo groupadd docker
+sudo usermod -aG docker $USER</code></pre><!--kg-card-begin: html--><ol start="3">
+    <li>Plug in your zwave usb dongle. </li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="4">
+    <li>Find the id of the serial device you just plugged in. You can list all serial devices using <code>ls /dev/serial/by-id/</code>.</li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="5">
+    <li>Create a docker-compose file for zwavejs2mqtt:</li>
+</ol><!--kg-card-end: html--><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; docker-compose.yml
+version: &apos;3.7&apos;
+services:
+  zwavejs2mqtt:
+    container_name: zwavejs2mqtt
+    image: zwavejs/zwavejs2mqtt:latest
+    restart: always
+    tty: true
+    stop_signal: SIGINT
+    environment:
+      - SESSION_SECRET=mysupersecretkey
+      - ZWAVEJS_EXTERNAL_CONFIG=/usr/src/app/store/.config-db
+      # Uncomment if you want logs time and dates to match your timezone instead of UTC
+      # Available at https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+      # - TZ=America/Los_Angeles
+    networks:
+      - zwave
+    devices:
+      # Do not use /dev/ttyUSBX serial devices, as those mappings can change over time.
+      # Instead, use the /dev/serial/by-id/X serial device for your Z-Wave stick.
+      - &apos;/dev/serial/by-id/insert_stick_reference_here:/dev/zwave&apos;
+    volumes:
+      - zwave-config:/usr/src/app/store
+    ports:
+      - &apos;8091:8091&apos; # port for web interface
+      - &apos;3000:3000&apos; # port for Z-Wave JS websocket server
+      - &apos;1883:1883&apos; # mqtt
+networks:
+  zwave:
+volumes:
+  zwave-config:
+    name: zwave-config
+EOF</code></pre><figcaption>Replace <em>mysupersecretkey</em> with a key of your choice. You can generate one easily using openssl: <code>openssl rand -hex 15</code>. Replace <em>insert_stick_reference_here</em> with the id from step 4.&#xA0;</figcaption></figure><!--kg-card-begin: html--><ol start="6">
+    <li>Start the container:</li>
+</ol><!--kg-card-end: html--><pre><code class="language-bash">docker compose up</code></pre><h2 id="deploying-home-assistant">Deploying home assistant </h2><p>Over on the jumpbox machine, add the <code>k8s-at-home</code> helm repository (if you haven&apos;t done so already).</p><pre><code class="language-text">helm repo add k8s-at-home https://k8s-at-home.com/charts/</code></pre><p>Create a values file:</p><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; home-assistant-values.yaml
+env:
+  TZ: America/Los Angeles
+service:
+  main:
+    type: LoadBalancer
+persistence:
+  config:
+    enabled: true
+EOF</code></pre><figcaption>Replace TZ with the timezone of your choice. A full list can be found here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones</figcaption></figure><p>Then install: </p><pre><code class="language-text">helm install home-assistant k8s-at-home/home-assistant -f home-assistant-values.
+yaml</code></pre><h2 id="installing-mosquitto-mqtt">Installing Mosquitto MQTT</h2><p>Create a values file:</p><figure class="kg-card kg-code-card"><pre><code class="language-text">cat &lt;&lt;EOF &gt; mqtt-values.yaml
+env:
+  TZ: America/Los Angeles
+service:
+  main:
+    type: LoadBalancer</code></pre><figcaption>Replace <em>TZ</em> with the timezone of your choice.</figcaption></figure><p>Install the helm chart.</p><pre><code class="language-text">helm install mosquitto k8s-at-home/mosquitto</code></pre><p>Now get the external IP address of the LoadBalancer service:</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card kg-width-wide">
+    <pre class="command-line" data-user="tceadmin" data-host="jumpbox" data-output="2-3">
+<code class="language-command-line">kubectl get svc mosquitto
+NAME        TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)          AGE
+mosquitto   LoadBalancer   100.69.203.75   192.168.30.213   1883:30582/TCP   62d</code></pre>
+</figure><!--kg-card-end: html--><p>The mqtt broker will be running at <code><em>externalIP</em>:1883</code>.</p><h2 id="setting-up-zwavejstomqtt">Setting up zwavejstomqtt</h2><p>Open the web ui at <code><em>&lt;raspberrypi ip&gt;</em>:8091</code>. Configure the following:</p><ol><li>Set serial port to <code>/dev/zwave</code> under Settings &#x2192; Zwave &#x2192; Serial Port (this is where docker mounts the USB stick). </li><li>Create network security keys under Settings &#x2192; Zwave &#x2192; Security Keys (S0 Legacy, S2 Unauthenticated, S2 Authenticated, and S2 Access Control). You can use the generate button (two arrows in each text box) to generate them for you.</li><li>Under Settings &#x2192; MQTT, add the MQTT information from earlier. For <code>Host url</code> use the LoadBalancer external IP, and for port use 1883.</li><li>Under Settings &#x2192; Home Assistant, enable MQTT Discovery.</li></ol><h3 id="adding-a-device-to-zwavejstomqtt">Adding a device to zwavejstomqtt</h3><p>Under the &quot;Smart Start&quot; tab, click on the + icon in the bottom right. If your Zwave device has a QR code on the side you can use the add using QR code option. Click on the option, grant the website camera access, and scan the QR code with your computer&apos;s webcam (or scan the info with your phones webcam and type it in manually). If your device does not have a QR code you can also add it manually using the DSK. </p><p>On the Control Panel page you should see a second device (with the first being the USB stick itself). If you click the device you should be able to control it, as well as query its data if it presents any. For example, for the smart outlet I have configured I can look at the historical power usage.</p><h2 id="adding-mqtt-to-home-assistant">Adding MQTT to Home Assistant </h2><p>Under Settings &#x2192; Devices and Services &#x2192; Add Integration (bottom right button), search for MQTT. Add the integration. Configure with the IP and port of the MQTT broker. Finally, go back to the dashboard. The added device should be visible.</p><h2 id="conclusion">Conclusion</h2><p>Bit of a long article, but we configured a number services across different machines. Hopefully this helps you on your Kubernetes edge journey!</p>]]></content:encoded></item><item><title><![CDATA[Post 5: Install a logging solution for a Kubernetes homelab]]></title><description><![CDATA[<h2 id="introductionefk-stack-onfor-kubernetes">Introduction - EfK stack on/for Kubernetes</h2><p><a href="https://tanzu.vmware.com/what-is-observability">Observability</a> is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and</p>]]></description><link>https://homelab.acgandhi.com/install-a-logging-solution-for-a-kubernetes-homelab/</link><guid isPermaLink="false">62fea40c8b7a36007d01f405</guid><category><![CDATA[Kubernetes]]></category><category><![CDATA[Elasticsearch]]></category><category><![CDATA[Tanzu]]></category><category><![CDATA[Kibana]]></category><category><![CDATA[Fluentbit]]></category><category><![CDATA[Logstash]]></category><category><![CDATA[homelab]]></category><dc:creator><![CDATA[Steven Wong]]></dc:creator><pubDate>Wed, 24 Aug 2022 00:37:42 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/08/elk-stack-3-elks-stacked.svg" medium="image"/><content:encoded><![CDATA[<h2 id="introductionefk-stack-onfor-kubernetes">Introduction - EfK stack on/for Kubernetes</h2><img src="https://homelab.acgandhi.com/content/images/2022/08/elk-stack-3-elks-stacked.svg" alt="Post 5: Install a logging solution for a Kubernetes homelab"><p><a href="https://tanzu.vmware.com/what-is-observability">Observability</a> is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and services, identifying complex interactions between elements and allowing you to troubleshoot performance issues, improve management, and optimize cloud native infrastructure and applications.</p><p>This article covers running a logging solution hosted on, and supporting Kubernetes. </p><div class="kg-card kg-callout-card kg-callout-card-yellow"><div class="kg-callout-emoji">&#x26A0;&#xFE0F;</div><div class="kg-callout-text">This type of logging stack is rather resource intensive to run. We strongly recommend deploying to a cluster with 3 nodes (or more).</div></div><p><strong>ELK </strong>is an acronym that describes a popular &#x201C;stack&#x201D; of open source components used to implement an n-tier logging solution with search, analytics and user interface. <strong>E</strong>=<a href="https://github.com/elastic/elasticsearch">elasticsearch</a>, <strong>L</strong>=<a href="https://github.com/elastic/logstash">Logstash</a>, and <strong>K</strong>=<a href="https://github.com/elastic/kibana">Kibana</a>. With Kubernetes it is often popular to swap out the <strong>L</strong>=Logstash component for <strong>f</strong>=<a href="https://github.com/fluent/fluent-bit">fluentbit</a> (aka <strong>EfK stack</strong>).</p><p>This substitution is popular because fluentbit is <a href="https://www.cncf.io/blog/2022/02/10/logstash-fluentd-fluent-bit-or-vector-how-to-choose-the-right-open-source-log-collector/">comparatively very light on resource demands</a> (important because log collection elements run on every Kubernetes cluster node) and because it has a set of configurable input plugins that support gathering logs from Kubernetes itself plus the containers Kubernetes is hosting.</p><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/08/efk-stack-picture-1.png" class="kg-image" alt="Post 5: Install a logging solution for a Kubernetes homelab" loading="lazy" width="1158" height="620" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/efk-stack-picture-1.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/efk-stack-picture-1.png 1000w, https://homelab.acgandhi.com/content/images/2022/08/efk-stack-picture-1.png 1158w" sizes="(min-width: 720px) 720px"><figcaption><em>EFK stack</em> components</figcaption></figure><h2 id="install-elasticsearch-and-kibana-using-a-helm-chart">Install ElasticSearch and Kibana using a helm chart</h2><p>The <a href="https://www.elastic.co/webinars/elasticsearch-architecture-best-practices">best practice</a> is to use seven pods in the Elasticsearch cluster:</p><ul><li>Three master pods for managing the cluster.</li><li>Two data pods for storing data and processing queries.</li><li>Two client (or coordinating) pods for directing traffic. The &#x201C;official&#x201D; helm chart from <a href="https://github.com/elastic/helm-charts">elastic</a> involves a multi-step process to do a horizontally scaled configuration like this so we are using the helm chart from <a href="https://github.com/bitnami/charts/tree/master/bitnami/elasticsearch/">bitnami</a> instead.</li></ul><p>Add the Bitnami helm repo if you don&apos;t already have it from a previous service installation:</p><pre><code class="language-text">helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update</code></pre><p>This example assumes you have a storage class pre-defined, named <code>silver</code>, and have a service load balancer in place. Adjust the steps as needed.</p><pre><code class="language-bash"># create namespace
+kubectl create ns kube-logging
+
+# install
+helm install elasticsearch bitnami/elasticsearch -n kube-logging --set global.storageClass=silver,global.kibanaEnabled=true,service.type=LoadBalancer,kibana.service.type=LoadBalancer,master.replicas=3,coordinating.service.type=LoadBalancer</code></pre><h2 id="install-fluentbit-using-a-carvel-package">Install Fluentbit using a Carvel package</h2><p>To feed logs from Kubernetes to the Elasticsearch, Kibana combo - <a href="https://fluentbit.io/">fluentbit</a> will be used. This will cover an install using the Carvel based package option built into <a href="https://tanzucommunityedition.io/docs/v0.12/package-management/">Tanzu Community Edition</a>. If you are on a Kubernetes distribution that does not support <a href="https://carvel.dev/">Carvel</a>, then a <a href="https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit">fluent bit install using helm</a> with similar settings should work.</p><p>First a yaml file is composed to set inputs, outputs, parsers and filters appropriate for Kubernetes log collection.</p><pre><code class="language-yaml">cat &lt;&lt; EOF &gt; fluent-bit-data-values.yaml
+namespace: &quot;kube-logging&quot;
+fluent_bit:
+  config:
+    service: |
+      [Service]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+    outputs: |
+     [OUTPUT]
+       Name            es
+       Match           *
+       Host            elasticsearch
+       Port            9200
+       Logstash_Format On
+       Replace_Dots    On
+       Retry_Limit     False
+       Buffer_Size     64KB
+       Suppress_Type_Name On
+
+    inputs: |
+      [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*.log
+        Parser            cri
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+      [INPUT]
+        Name                systemd
+        Tag                 kube_systemd.*
+        Path                /var/log/journal
+        DB                  /var/log/flb_kube_systemd.db
+        Systemd_Filter      _SYSTEMD_UNIT=kubelet.service
+        Systemd_Filter      _SYSTEMD_UNIT=containerd.service
+        Read_From_Tail      On
+        Strip_Underscores   On
+
+    filters: |
+      [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Merge_Log_Key       log_processed
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+
+    parsers: |
+      # see https://github.com/fluent/fluent-bit/blob/v1.7.5/conf/parsers.conf
+      [PARSER]
+        Name   apache
+        Format regex
+        Regex  ^(?&lt;host&gt;[^ ]*) [^ ]* (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] &quot;(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^\&quot;]*?)(?: +\S*)?)?&quot; (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: &quot;(?&lt;referer&gt;[^\&quot;]*)&quot; &quot;(?&lt;agent&gt;[^\&quot;]*)&quot;)?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   apache2
+        Format regex
+        Regex  ^(?&lt;host&gt;[^ ]*) [^ ]* (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] &quot;(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^ ]*) +\S*)?&quot; (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: &quot;(?&lt;referer&gt;[^\&quot;]*)&quot; &quot;(?&lt;agent&gt;[^\&quot;]*)&quot;)?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   apache_error
+        Format regex
+        Regex  ^\[[^ ]* (?&lt;time&gt;[^\]]*)\] \[(?&lt;level&gt;[^\]]*)\](?: \[pid (?&lt;pid&gt;[^\]]*)\])?( \[client (?&lt;client&gt;[^\]]*)\])? (?&lt;message&gt;.*)$
+
+      [PARSER]
+        Name   nginx
+        Format regex
+        Regex ^(?&lt;remote&gt;[^ ]*) (?&lt;host&gt;[^ ]*) (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] &quot;(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^\&quot;]*?)(?: +\S*)?)?&quot; (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: &quot;(?&lt;referer&gt;[^\&quot;]*)&quot; &quot;(?&lt;agent&gt;[^\&quot;]*)&quot;)?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   json
+        Format json
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name        docker-daemon
+        Format      regex
+        Regex       time=&quot;(?&lt;time&gt;[^ ]*)&quot; level=(?&lt;level&gt;[^ ]*) msg=&quot;(?&lt;msg&gt;[^ ].*)&quot;
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        # http://rubular.com/r/tjUt3Awgg4
+        Name cri
+        Format regex
+        Regex ^(?&lt;time&gt;[^ ]+) (?&lt;stream&gt;stdout|stderr) (?&lt;logtag&gt;[^ ]*) (?&lt;message&gt;.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+      [PARSER]
+        Name        logfmt
+        Format      logfmt
+
+      [PARSER]
+        Name        syslog-rfc5424
+        Format      regex
+        Regex       ^\&lt;(?&lt;pri&gt;[0-9]{1,5})\&gt;1 (?&lt;time&gt;[^ ]+) (?&lt;host&gt;[^ ]+) (?&lt;ident&gt;[^ ]+) (?&lt;pid&gt;[-0-9]+) (?&lt;msgid&gt;[^ ]+) (?&lt;extradata&gt;(\[(.*)\]|-)) (?&lt;message&gt;.+)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name        syslog-rfc3164-local
+        Format      regex
+        Regex       ^\&lt;(?&lt;pri&gt;[0-9]+)\&gt;(?&lt;time&gt;[^ ]* {1,2}[^ ]* [^ ]*) (?&lt;ident&gt;[a-zA-Z0-9_\/\.\-]*)(?:\[(?&lt;pid&gt;[0-9]+)\])?(?:[^\:]*\:)? *(?&lt;message&gt;.*)$
+        Time_Key    time
+        Time_Format %b %d %H:%M:%S
+        Time_Keep   On
+
+      [PARSER]
+        Name        syslog-rfc3164
+        Format      regex
+        Regex       /^\&lt;(?&lt;pri&gt;[0-9]+)\&gt;(?&lt;time&gt;[^ ]* {1,2}[^ ]* [^ ]*) (?&lt;host&gt;[^ ]*) (?&lt;ident&gt;[a-zA-Z0-9_\/\.\-]*)(?:\[(?&lt;pid&gt;[0-9]+)\])?(?:[^\:]*\:)? *(?&lt;message&gt;.*)$/
+        Time_Key    time
+        Time_Format %b %d %H:%M:%S
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name    kube-custom
+        Format  regex
+        Regex   (?&lt;tag&gt;[^.]+)?\.?(?&lt;pod_name&gt;[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?&lt;namespace_name&gt;[^_]+)_(?&lt;container_name&gt;.+)-(?&lt;docker_id&gt;[a-z0-9]{64})\.log$
+
+    streams: &quot;&quot;
+    plugins: &quot;&quot;
+
+  daemonset:
+    resources: { }
+    podAnnotations: { }
+    podLabels: { }
+EOF</code></pre><pre><code class="language-text">tanzu package install fluent-bit --package-name fluent-bit.community.tanzu.vmware.com --version 1.7.5 --namespace kube-logging --values-file fluent-bit-data-values.yaml</code></pre><h2 id="examine-logs-using-the-kibana-ui">Examine logs using the Kibana UI</h2><p>Wait for all pods in the <code>kube-logging</code> namespace to start.</p><ol><li>Use <code>kubectl get svc -n kube-logging</code> to get the external load balanced ip of the kibana ui.</li><li>Open <code>http://&lt;<em>kibana ip</em>&gt;:5601</code> &#xA0;in a browser</li><li>Dismiss the integration popup, click on the menu on the left, then discover</li><li>Create a data view</li><li>Set index pattern to &#xA0;logstash-* Note that the trailing asterisk will be added automatically</li><li>Choose @timestamp from dropdown.</li><li>Choose discover and select &#x201C;last 15 minutes&#x201D;. You should see log entries. Refer to the <a href="https://www.elastic.co/guide/index.html">ElasticSearch/Kibana online docs</a> or videos for more details on how this can be used</li></ol>]]></content:encoded></item><item><title><![CDATA[Post 4: Harbor Container Registry]]></title><description><![CDATA[<h2 id="what-is-harbor">What is Harbor?</h2><p><strong>Harbor</strong> is a container registry, i.e. a system which manages container images which can then be used by Kubernetes. It is a self-hosted alternative to a cloud based service like <a href="https://hub.docker.com">Docker Hub</a>.</p><h2 id="why-do-we-want-to-use-harbor-vs-a-cloud-registry-like-docker-hub">Why do we want to use Harbor (vs a cloud registry like Docker Hub)</h2>]]></description><link>https://homelab.acgandhi.com/post-4-harbor-container-registry/</link><guid isPermaLink="false">62fbe10d8b7a36007d01f104</guid><category><![CDATA[Harbor]]></category><category><![CDATA[Kubernetes]]></category><category><![CDATA[Container]]></category><category><![CDATA[Certificates]]></category><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 22 Aug 2022 20:00:00 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/08/harbor-horizontal-color.png" medium="image"/><content:encoded><![CDATA[<h2 id="what-is-harbor">What is Harbor?</h2><img src="https://homelab.acgandhi.com/content/images/2022/08/harbor-horizontal-color.png" alt="Post 4: Harbor Container Registry"><p><strong>Harbor</strong> is a container registry, i.e. a system which manages container images which can then be used by Kubernetes. It is a self-hosted alternative to a cloud based service like <a href="https://hub.docker.com">Docker Hub</a>.</p><h2 id="why-do-we-want-to-use-harbor-vs-a-cloud-registry-like-docker-hub">Why do we want to use Harbor (vs a cloud registry like Docker Hub)?</h2><p>A few concrete reasons stick out:</p><ul><li>If your cluster restarts (say due to a power outage or hardware failure) then on reboot Kubernetes may try to pull many images at once from the internet, which could clog up your internet connection. Your download speed from a local hard disk is probably faster then your internet connection, especially at home.</li><li>Cloud registries are known to be vectors for malware. Docker Hub integrates with scanning tools to allow you to first pull images, scan them for malware and vulnerabilities, and then choose whether or not to deploy.</li><li>As with any cloud based service, it is subject to change. While Docker Hub is free, it is rate limited, and it could be not free tomorrow. </li></ul><h2 id="installation">Installation </h2><div class="kg-card kg-callout-card kg-callout-card-blue"><div class="kg-callout-emoji">&#x1F510;</div><div class="kg-callout-text">Note: I&apos;m going to be deploying Harbor with trusted certs from Let&apos;s Encrypt. This requires that you own a domain name, and that the DNS provider for that domain is one that is <a href="https://cert-manager.io/docs/configuration/acme/dns01/#supported-dns01-providers">supported by cert-manager</a>&apos;s DNS01 challenge. This doesn&apos;t mean you have to have bought your domain from one of these providers (I bought mine from Namecheap and registered the DNS for free with Cloudflare). If you don&apos;t have a domain there is a way you can get Tanzu (and any other k8s distribution I assume) to <a href="https://tanzu.vmware.com/content/blog/how-to-set-up-harbor-registry-self-signed-certificates-tanzu-kubernetes-clusters">trust self-signed certificates</a>.</div></div><p>Before we can even think about installing Harbor there&apos;s a small sized list of dependencies we need to go through (an American small size, that is).</p><h3 id="command-line-tools">Command line tools</h3><p>Install <a href="https://carvel.dev/imgpkg/">imgpkg</a>:</p><pre><code class="language-bash">wget https://carvel.dev/install.sh -O install.sh
+
+# Inspect install.sh before running...
+sudo bash install.sh
+imgpkg version</code></pre><p>Install <a href="https://github.com/mikefarah/yq">yq</a>:</p><figure class="kg-card kg-code-card"><pre><code class="language-bash">wget https://github.com/mikefarah/yq/releases/download/${VERSION}/yq_linux_amd64 -O yq &amp;&amp; chmod +x yq &amp;&amp; sudo mv yq /usr/bin/yq</code></pre><figcaption>Replace <em>${VERSION}</em> with the latest version of yq, e.g. <em>v4.27.2</em></figcaption></figure><h3 id="kubernetes-packages">Kubernetes Packages</h3><p>Install cert-manager:</p><figure class="kg-card kg-code-card"><pre><code class="language-bash"># Get package versions
+tanzu package available list cert-manager.community.tanzu.vmware.com
+# Install
+tanzu package install cert-manager \
+   --package-name cert-manager.community.tanzu.vmware.com \
+   --version ${CERT_MANAGER_PACKAGE_VERSION}</code></pre><figcaption>Replace <em>${CERT_MANAGER_PACKAGE_VERSION}</em> with the latest version of cert-manager from the first command.</figcaption></figure><p>Install Contour (note: to install Contour your cluster must have a service LoadBalancer. See <a href="https://homelab.acgandhi.com/post-2-deploying-a-workload-cluter/#installing-kube-vip">post 2 for more info</a>:</p><figure class="kg-card kg-code-card"><pre><code class="language-bash"># Get package versions
+tanzu package available list contour.community.tanzu.vmware.com
+# Install
+tanzu package install contour \
+   --package-name contour.community.tanzu.vmware.com \
+   --version ${CONTOUR_PACKAGE_VERSION}</code></pre><figcaption>Replace <em>${CONTOUR_PACKAGE_VERSION}</em> with latest version of Contour from the first command.</figcaption></figure><h3 id="harbor">Harbor</h3><h4 id="creating-certificates-for-harbor">Creating Certificates for Harbor</h4><p>In order to issue certificates cert-manager is going to use a <strong>DNS challenge</strong>. This challenge creates temporary DNS records to prove your ownership of your domain to Let&apos;s Encrypt. Since this challenge runs each time the certificate renews (every 60 days), cert-manager requires an automatic way to create DNS records for our domain, e.g. by providing cert-manager with an API key or other credentials by which it can access the DNS provider. This will vary a bit depending on the DNS provider for your domain. I&apos;ll be covering Cloudflare, see the <a href="https://cert-manager.io/docs/configuration/acme/dns01/#supported-dns01-providers">cert-manager docs</a> for other providers. </p><p>On the Cloudflare web dashboard navigate to <a href="https://dash.cloudflare.com/profile/api-tokens">User Profile <strong>&#x2192;</strong> API Tokens</a> <strong>&#x2192;</strong> API Tokens. Create an API token with the following settings:</p><ul><li>Permissions: <code>Zone - DNS - Edit</code>, <code>Zone - Zone - Read</code></li><li>Resources: <code>Include - All Zones</code></li></ul><p>Next create a Kubernetes secret to store your API token:</p><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; cloudflare-api-dns-token-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-dns-token-secret
+  namespace: cert-manager
+type: Opaque
+stringData:
+  api-token: YOUR_API_TOKEN
+EOF
+
+kubectl apply -f cloudflare-api-dns-token-secret.yaml</code></pre><figcaption>Replace <em>YOUR_API_TOKEN </em>with your token from Cloudflare</figcaption></figure><p>Create a <strong>ClusterIssuer </strong>resource. This will issue certificates. </p><div class="kg-card kg-callout-card kg-callout-card-blue"><div class="kg-callout-emoji">&#x1F4A1;</div><div class="kg-callout-text">Kubernetes also has a <strong>Issuer </strong>resource. These can only issue certificates in one namespace, while ClusterIssuer can issue certs in all namespaces on a cluster.</div></div><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; letsencrypt-prod.yaml
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  namespace: cert-manager
+spec:
+  acme:
+    email: youremail@example.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-dns-token-secret
+            key: api-token
+EOF
+
+kubectl apply -f letsencrypt-prod.yaml</code></pre><figcaption>Replace <em>youremail@example.com</em> with your email. Let&apos;s Encrypt may use this email to contact you about your certificate.</figcaption></figure><p> Finally create a Certificate resource for Harbor to use:</p><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; harbor-cert.yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: harbor-external-cert
+  namespace: harbor
+  labels:
+    app: harbor
+spec:
+  dnsNames:
+  - harbor.private.tcehomelab.com
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  secretName: harbor-external-cert-tls
+  usages:
+  - digital signature
+  - key encipherment</code></pre><p>If everything went well <code>kubectl get certificates -n harbor</code> should show the following:</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card">
+    <pre class="command-line" data-prompt="$" data-output="2-3">
+<code class="language-command-line">kubectl get certificates -n harbor
+NAME                   READY   SECRET                           
+harbor-external-cert   True    harbor.private.tcehomelab.com-tls   7m</code></pre>
+</figure><!--kg-card-end: html--><p>It may take a few minutes to become ready. You can run <code>kubectl describe certificate -n harbor harbor-external-cert</code> to see Certificate details. If you have waited a few minutes and the certificate is still not ready, follow the <a href="https://cert-manager.io/docs/faq/acme/">troubleshooting steps listed here</a>.</p><h4 id="installing-harbor">Installing Harbor</h4><p>We are finally ready to install harbor. </p><p>Download the values file and password-generation scripts.</p><pre><code class="language-bash"># harbor-values.yaml
+wget https://raw.githubusercontent.com/vmware-tanzu/community-edition/main/addons/packages/harbor/2.4.2/bundle/config/values.yaml -O harbor-values.yaml
+# generate-passwords.sh
+wget https://raw.githubusercontent.com/vmware-tanzu/community-edition/main/addons/packages/harbor/2.4.2/bundle/config/scripts/generate-passwords.sh -O generate-passwords.sh</code></pre><p>Run the password generation script on the values file. This will modify the file to include the passwords and keys that Harbor needs.</p><pre><code class="language-bash">bash generate-passwords.sh harbor-values.yaml</code></pre><p>Open <code>harbor-values.yaml</code> in an editor of your choice. Change the <code>hostname</code> to the FQDN where you plan to host Harbor and should match the DNS name of the Certificate created earlier (in my case <code>harbor.private.tcehomelab.com</code>). Set the &#xA0;<code>tlsCertificateSecretName</code> to <code>harbor-external-cert-tls</code>. Save the file.</p><p>Run the following to create a copy of the values file with comments removed (it uses the <code>yq</code> tool we installed earlier):</p><pre><code class="language-bash">cp harbor-values.yaml harbor-values-clean.yaml &amp;&amp; yq -i eval &apos;... comments=&quot;&quot;&apos; harbor-values-clean.yaml</code></pre><p>Install harbor:</p><pre><code class="language-text">tanzu package install harbor -p harbor.community.tanzu.vmware.com -v 2.4.2 -f harbor-values-no-comment.yaml</code></pre><p>Finally, create a Kubernetes ingress resource:</p><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; harbor-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harbor
+  labels:
+    app: harbor
+  namespace: harbor
+spec:
+  rules:
+  - host: harbor.private.tcehomelab.com
+    http:
+      paths:
+      - backend:
+          service:
+            name: harbor-portal
+            port:
+              number: 443
+        path: &quot;/&quot;
+        pathType: ImplementationSpecific
+EOF
+
+kubectl apply -f harbor-ingress.yaml</code></pre><figcaption>Change host to your hostname.</figcaption></figure><p>If you run <code>kubectl get ing -n harbor</code> you should see an output similar to the following:</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card">
+    <pre class="command-line" data-prompt="$" data-output="2-3">
+<code class="language-command-line">kubectl get ing -n harbor        
+NAME     CLASS    HOSTS                           ADDRESS          PORTS   AGE
+harbor   &lt;none&gt;   harbor.private.tcehomelab.com   192.168.30.212   80      10m</code></pre>
+</figure><!--kg-card-end: html--><figure class="kg-card kg-image-card"><img src="https://homelab.acgandhi.com/content/images/2022/08/harbor-host-override.png" class="kg-image" alt="Post 4: Harbor Container Registry" loading="lazy" width="2000" height="562" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/harbor-host-override.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/harbor-host-override.png 1000w, https://homelab.acgandhi.com/content/images/size/w1600/2022/08/harbor-host-override.png 1600w, https://homelab.acgandhi.com/content/images/size/w2400/2022/08/harbor-host-override.png 2400w" sizes="(min-width: 720px) 720px"></figure><p>Add a DNS entry on your local network DNS (e.g. pfSense) that points the harbor host to the IP address of the ingress. </p><p>Finally you should be able to go the Harbor webpage at whatever your hostname is. You can login with the username <code>admin</code> and password from harbor-values.yaml (<code>harborAdminPassword</code>). See the <a href="https://tanzucommunityedition.io/docs/v0.12/package-readme-harbor-2.4.2/#usage">usage section</a> of the TCE harbor docs or the official Harbor docs for more info, such as instructions for uploading an image to Harbor.</p>]]></content:encoded></item><item><title><![CDATA[Post 3: Exposing Kubernetes to the internet with Cloudflare tunnels]]></title><description><![CDATA[<p>In the last post we deployed Ghost, a content management system for a blog. In this article we&apos;ll be discussing ways to expose our blog to the internet.</p><p>The traditional way to expose something running on a home network to the internet would be to punch a hole</p>]]></description><link>https://homelab.acgandhi.com/post-3-https-public-ghost/</link><guid isPermaLink="false">62f2ecfc03d6a70068827c69</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 15 Aug 2022 17:46:11 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/08/kubernetes-internet.svg" medium="image"/><content:encoded><![CDATA[<img src="https://homelab.acgandhi.com/content/images/2022/08/kubernetes-internet.svg" alt="Post 3: Exposing Kubernetes to the internet with Cloudflare tunnels"><p>In the last post we deployed Ghost, a content management system for a blog. In this article we&apos;ll be discussing ways to expose our blog to the internet.</p><p>The traditional way to expose something running on a home network to the internet would be to punch a hole through the home firewall to allow the outside internet access to the specific server on the home network. However, this comes with a few drawbacks:</p><ul><li>Your home&apos;s IP address is exposed to anyone who knows the web address of your blog</li><li>Any allowed access to the internal network from the outside world could be a potential vulnerability. It is safer and simpler to have a standard firewall (which denies all inbound traffic) than one that allows some traffic through.</li></ul><p>Further, in order to HTTPS secure the blog we need to obtain trusted certificates from a 3rd party certificate authority. </p><p>An alternative method is to use a tunnel service, such as Cloudflare&apos;s Argo tunnels. Here, a program that runs on your local network (cloudflare daemon) makes a connection with Cloudflare&apos;s servers. When users connect to the site, they are connecting to Cloudflare&apos;s servers, which then redirects the connection to the home network. Your home IP is not exposed, no firewall holes are required, and Cloudflare handles issuing HTTPS certificates. </p><h2 id="setting-up-ghost">Setting up Ghost</h2><p>We&apos;re going to uninstall ghost.</p><pre><code class="language-text">helm uninstall ghost</code></pre><p>This won&apos;t delete everything; we need to delete the PersistentVolumeClaim created by Ghost as well.</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card kg-width-wide">
+    <pre class="command-line" data-user="tceadmin" data-host="jumpbox" data-output="2-3,5">
+<code class="language-command-line">kubectl get pvc                  
+NAME                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+data-ghost-mysql-0   Bound    pvc-eff97035-0ffb-4415-8c64-088239c88e10   8Gi        RWO            default        46h
+kubectl delete pvc data-ghost-mysql-0
+persistentvolumeclaim &quot;data-ghost-mysql-0&quot; deleted</code></pre>
+</figure><!--kg-card-end: html--><p>Next we&apos;ll be creating a values file for the Ghost install:</p><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; ghost-values.yaml
+service:
+  type: ClusterIP
+ghostHost: ghost.acgandhi.com
+ghostEmail: youremail@example.com
+ghostPassword: mustbemorethan10chars
+EOF</code></pre><figcaption>Change the ghostHost value to your domain, and the email and password to your email and a password your choice.</figcaption></figure><p>And then finally (re)installing ghost:</p><pre><code class="language-text">helm install ghost bitnami/ghost -f ghost-values.yaml</code></pre><p>You can run <code>kubectl get po,svc</code> to see which pods and services are created by Ghost. Unlike last time the Ghost service is of type ClusterIP instead of LoadBalancer. If you want to test the installation, you can use <code>kubectl port-forward</code>, and then access the website at <code><em>jumpboxVMIP</em>:8080</code>.</p><figure class="kg-card kg-code-card"><pre><code class="language-text">kubectl port-forward svc/ghost 8080:80 --address 0.0.0.0</code></pre><figcaption>To stop the port-forward you can simply press control+c</figcaption></figure><h2 id="installing-cloudflare-tunnel">Installing Cloudflare Tunnel</h2><p>If you don&apos;t have one already, you will need a domain name. It can be from any registrar, such as Google Domains, Namecheap, GoDaddy, Hover, etc. Follow <a href="https://developers.cloudflare.com/fundamentals/get-started/setup/add-site/">Cloudflare&apos;s instructions</a> to add your site and change your domain name to use Cloudflare as its authoritative DNS. </p><p>Next we have to install the cloudflared on our jumpbox. For more information look at Cloudflare&apos;s <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/">documentation</a>.</p><pre><code class="language-bash"># download binary 
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared
+# allow execution
+chmod +x cloudflared
+# move into path
+sudo mv cloudflared /usr/local/bin/</code></pre><p>Afterwards you can login, and then create the tunnel resource.</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card">
+    <pre class="command-line" data-prompt="$" data-output="2,4-6">
+<code class="language-command-line">cloudflared tunnel login
+
+cloudflared tunnel create ghostdemo
+Tunnel credentials written to /home/tceadmin/.cloudflared/7e87f3da-29da-4a99-a4f0-ca7eafffec9d.json. cloudflared chose this file based on where your origin certificate was found. Keep this file secret. To revoke these credentials, delete the tunnel.
+
+Created tunnel ghostdemo with id 7e87f3da-29da-4a99-a4f0-ca7eafffec9d</code></pre>
+    <figcaption>Change <code>ghostdemo</code> to whatever you want to call your tunnel.</figcaption>
+</figure><!--kg-card-end: html--><p>Next you&apos;ll upload the tunnel credentials created to Kubernetes. </p><figure class="kg-card kg-code-card"><pre><code class="language-text">kubectl create secret generic tunnel-credentials \
+--from-file=credentials.json=/home/tceadmin/.cloudflared/7e87f3da-29da-4a99-a4f0-ca7eafffec9d.json</code></pre><figcaption>Use the directory of the credentials file from the output of the last step.</figcaption></figure><p>Then, we&apos;re going to create two DNS records: one for the blog itself, and another for Cloudflared&apos;s hello_world test service. You can use the cloudflared CLI or manually add CNAME records targeting <code>&lt;<em>tunnelid</em>&gt;.cfargotunnel.com</code>. I ran into issues with the manual record creation and so I recommend the command line approach (it&apos;s easier, too!).</p><p>The command syntax is <code>cloudflared tunnel route dns &lt;<em>tunnel</em>&gt; &lt;<em>hostname</em>&gt;</code>. So, in my case I ran the following two commands:</p><pre><code class="language-text">cloudflared tunnel route dns ghostdemo ghostdemo.acgandhi.com
+cloudflared tunnel route dns ghostdemo helloworld.acgandhi.com</code></pre><p>If we look on the Cloudflare <a href="dash.cloudflare.com">web console</a> we can see that both of these records are created:</p><figure class="kg-card kg-image-card"><img src="https://homelab.acgandhi.com/content/images/2022/08/cloudflare-tunnel-dns-records.png" class="kg-image" alt="Post 3: Exposing Kubernetes to the internet with Cloudflare tunnels" loading="lazy" width="1313" height="346" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/cloudflare-tunnel-dns-records.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/cloudflare-tunnel-dns-records.png 1000w, https://homelab.acgandhi.com/content/images/2022/08/cloudflare-tunnel-dns-records.png 1313w" sizes="(min-width: 720px) 720px"></figure><p>Finally we&apos;re ready to deploy cloudflared on Kubernetes. Copy the following text into a file named <code>cloudflared.yaml</code>.</p><pre><code class="language-yaml">---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+spec:
+  selector:
+    matchLabels:
+      app: cloudflared
+  replicas: 2 # You could also consider elastic scaling for this deployment
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+      - name: cloudflared
+        image: cloudflare/cloudflared:2022.3.0
+        args:
+        - tunnel
+        # Points cloudflared to the config file, which configures what
+        # cloudflared will actually do. This file is created by a ConfigMap
+        # below.
+        - --config
+        - /etc/cloudflared/config/config.yaml
+        - run
+        livenessProbe:
+          httpGet:
+            # Cloudflared has a /ready endpoint which returns 200 if and only if
+            # it has an active connection to the edge.
+            path: /ready
+            port: 2000
+          failureThreshold: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        volumeMounts:
+        - name: config
+          mountPath: /etc/cloudflared/config
+          readOnly: true
+        # Each tunnel has an associated &quot;credentials file&quot; which authorizes machines
+        # to run the tunnel. cloudflared will read this file from its local filesystem,
+        # and it&apos;ll be stored in a k8s secret.
+        - name: creds
+          mountPath: /etc/cloudflared/creds
+          readOnly: true
+      volumes:
+      - name: creds
+        secret:
+          # By default, the credentials file will be created under ~/.cloudflared/&lt;tunnel ID&gt;.json
+          # when you run `cloudflared tunnel create`. You can move it into a secret by using:
+          # ```sh
+          # kubectl create secret generic tunnel-credentials \
+          # --from-file=credentials.json=/Users/yourusername/.cloudflared/&lt;tunnel ID&gt;.json
+          # ```
+          secretName: tunnel-credentials
+      # Create a config.yaml file from the ConfigMap below.
+      - name: config
+        configMap:
+          name: cloudflared
+          items:
+          - key: config.yaml
+            path: config.yaml
+---
+# This ConfigMap is just a way to define the cloudflared config.yaml file in k8s.
+# It&apos;s useful to define it in k8s, rather than as a stand-alone .yaml file, because
+# this lets you use various k8s templating solutions (e.g. Helm charts) to
+# parameterize your config, instead of just using string literals.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared
+data:
+  config.yaml: |
+    # Name of the tunnel you want to run
+    tunnel: light-api
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    # Serves the metrics server under /metrics and the readiness server under /ready
+    metrics: 0.0.0.0:2000
+    # Autoupdates applied in a k8s pod will be lost when the pod is removed or restarted, so
+    # autoupdate doesn&apos;t make sense in Kubernetes. However, outside of Kubernetes, we strongly
+    # recommend using autoupdate.
+    no-autoupdate: true
+    # The `ingress` block tells cloudflared which local service to route incoming
+    # requests to. For more about ingress rules, see
+    # https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/configuration/ingress
+    #
+    # The first rule proxies traffic to the ghost installation
+    - hostname: ghostdemo.acgandhi.com
+      service: http://ghost.default.svc.cluster.local:80
+    #
+    # This rule sends traffic to the built-in hello-world HTTP server. This can help debug connectivity
+    # issues. If helloworld.example.com resolves and tunnel.example.com does not, then the problem is
+    # in the connection from cloudflared to your local service, not from the internet to cloudflared.
+    - hostname: helloworld.acgandhi.com
+      service: hello_world
+    #
+    # This rule matches any traffic which didn&apos;t match a previous rule, and responds with HTTP 404.
+    - service: http_status:404
+</code></pre><p>All the way at the bottom of the file the configuration for the tunnel is defined. Each of the entries in the ingress section of the configuration define connections between a domain name to another a local URL. In this case, they connect to Kubernetes services, using the Kubernetes DNS name of that service. The format for the DNS name is <code><em>servicename</em>.<em>namespace</em>.svc.cluster.local</code>, for more info see the <a href="https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/">Kubernetes docs</a>. <strong>Change </strong>the hostname to your domain name (the same one you created a DNS record for in the last step).</p><p>Apply the yaml.</p><pre><code class="language-text">kubectl apply -f cloudflared.yaml</code></pre><p>Finally, if you go to the hostname in your web browser (in my case <code>ghostdemo.acgandhi.com</code>) you should be able to see the site. You can also go to the helloworld status page (in my case <code>helloworld.acgandhi.com</code>) and see the cloudflare helloworld service. The blog&apos;s admin dashboard is available at <code>ghostdemo.acgandhi.com/ghost</code>.</p><p></p>]]></content:encoded></item><item><title><![CDATA[Post 2: Setting up a workload cluster, and deploying a blog]]></title><description><![CDATA[<p>Tanzu creates a <strong>Management Cluster</strong>, which is used to deploy one or more <strong>Workload Clusters</strong> which will actually run our applications. </p><p>To create a workload cluster follow the <a href="https://tanzucommunityedition.io/docs/v0.12/workload-clusters/">TCE docs</a>. Make sure your kubectl config is set to the workload cluster (you can check this using <code>kubectl config current-context</code> ).</p><h2 id="installing-kube-vip">Installing</h2>]]></description><link>https://homelab.acgandhi.com/post-2-deploying-a-workload-cluter/</link><guid isPermaLink="false">62e4649903d6a70068827940</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 15 Aug 2022 17:46:00 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/08/DSC01140--1-.jpg" medium="image"/><content:encoded><![CDATA[<img src="https://homelab.acgandhi.com/content/images/2022/08/DSC01140--1-.jpg" alt="Post 2: Setting up a workload cluster, and deploying a blog"><p>Tanzu creates a <strong>Management Cluster</strong>, which is used to deploy one or more <strong>Workload Clusters</strong> which will actually run our applications. </p><p>To create a workload cluster follow the <a href="https://tanzucommunityedition.io/docs/v0.12/workload-clusters/">TCE docs</a>. Make sure your kubectl config is set to the workload cluster (you can check this using <code>kubectl config current-context</code> ).</p><h2 id="installing-kube-vip">Installing kube-vip</h2><p>Kubernetes runs workloads inside of pods. In order for those to be reachable outside of Kubernetes, they need to be exposed to the outside world using a service. Services come in 3 flavors: <strong>ClusterIP </strong>(the default, which only exposes a pod on the k8s network), <strong>NodePort </strong>(which exposes pods on a single IP using a range of ports), and <strong>LoadBalancer </strong>(which chooses from a range of IPs to assign to a pod). TCE does not come with a LoadBalancer implementation, allowing the user to choose one to use. We will be installing kube-vip (MetalLB is another choice).</p><p>To install kube-vip, we will be using a <strong>Carvel</strong> package created by fellow VMware employee <a href="https://twitter.com/VRAbbi_IL">Scott Rosenberg</a>. You can follow Steps 1-5 in the <a href="https://williamlam.com/2021/10/quick-tip-install-kube-vip-as-service-load-balancer-with-tanzu-community-edition-tce.html">excellent blog post</a> by another VMware employee, William Lam.</p><p>If you want to be sure that your installation was successful, you could continue following William&apos;s tutorial and install the yelb demo application. Once you are done, you can uninstall yelb using <code>kubectl delete all -n yelb</code> (deletes everything in the yelb namepace) and <code>kubectl delete ns yelb</code> (deletes the namespace itself). </p><h2 id="hosting-a-blog">Hosting a Blog</h2><p>As a part of the jumpbox installation helm was installed. Like Carvel, <strong>helm </strong>is a package manager for Kubernetes, which allows packages to be defined using <strong>charts</strong>, which can be installed with the <code>helm install</code> command. Charts also define a set of <strong>values</strong>, variables which can be set by the user to customize the install.</p><p>In order to install Ghost we first need to add Bitnami&apos;s chart repository to helm. </p><pre><code class="language-text">helm repo add bitnami https://charts.bitnami.com/bitnami</code></pre><p>We can then install ghost with the following command:</p><figure class="kg-card kg-code-card"><pre><code class="language-text">helm install ghost bitnami/ghost</code></pre><figcaption><strong>Info:</strong> The general helm install syntax is as follows: <code>helm install name-of-release location/of/chart</code>. <em>Releases</em> are helm&apos;s name for an instance of a chart. In our case we named the release &quot;ghost&quot;.</figcaption></figure><p>Running <code>kubectl get all</code> you can get some of the kubernetes resources created by Ghost (note that unlike the name suggests &quot;get all&quot; does not show every Kubernetes resource, and excludes many e.g. ingresses and persistent volumes).</p><p>You can see that service/ghost is of type LoadBalancer has an external IP. This IP is assigned to it by kube-vip out of the pool of IPs specified in the kube-vip values file. </p><figure class="kg-card kg-image-card kg-width-wide"><img src="https://homelab.acgandhi.com/content/images/2022/08/vm-to-template.png" class="kg-image" alt="Post 2: Setting up a workload cluster, and deploying a blog" loading="lazy" width="1023" height="396" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/vm-to-template.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/vm-to-template.png 1000w, https://homelab.acgandhi.com/content/images/2022/08/vm-to-template.png 1023w"></figure><!--kg-card-begin: html--><figure class="kg-card kg-code-card kg-width-wide"><pre class="command-line" data-user="tceadmin" data-host="jumpbox" data-output="2-12">
+<code class="language-command-line">kubectl get all         
+NAME                READY   STATUS    RESTARTS   AGE
+pod/ghost-mysql-0   1/1     Running   0          4m50s
+
+NAME                           TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
+service/ghost                  LoadBalancer   100.71.156.29   192.168.30.240   80:30201/TCP   4m51s
+service/ghost-mysql            ClusterIP      100.70.89.188   &lt;none&gt;           3306/TCP       4m51s
+service/ghost-mysql-headless   ClusterIP      None            &lt;none&gt;           3306/TCP       4m51s
+service/kubernetes             ClusterIP      100.64.0.1      &lt;none&gt;           443/TCP        5h32m
+
+NAME                           READY   AGE
+statefulset.apps/ghost-mysql   1/1     4m51s</code>
+</pre></figure><!--kg-card-end: html--><p>The eagle-eyed among you may notice the only pod is one for the database. That can&apos;t be right&#x2014;where&apos;s the actual website?</p><p>As a part of the installation we needed to specify the hostname of the website. The problem is we don&apos;t know the IP address the Load Balancer will get until after the deployment.</p><p>No problem. We can simply get the address and other info, and then redeploy. </p><pre><code class="language-bash">export APP_HOST=$(kubectl get svc --namespace default ghost --template &quot;{{ range (index .status.loadBalancer.ingress 0) }}{{ . }}{{ end }}&quot;)
+export GHOST_PASSWORD=$(kubectl get secret --namespace &quot;default&quot; ghost -o jsonpath=&quot;{.data.ghost-password}&quot; | base64 -d)
+export MYSQL_ROOT_PASSWORD=$(kubectl get secret --namespace &quot;default&quot; ghost-mysql -o jsonpath=&quot;{.data.mysql-root-password}&quot; | base64 -d)
+export MYSQL_PASSWORD=$(kubectl get secret --namespace &quot;default&quot; ghost-mysql -o jsonpath=&quot;{.data.mysql-password}&quot; | base64 -d)
+helm upgrade --namespace default ghost bitnami/ghost --set service.type=LoadBalancer,ghostHost=$APP_HOST,ghostPassword=$GHOST_PASSWORD,mysql.auth.rootPassword=$MYSQL_ROOT_PASSWORD,mysql.auth.password=$MYSQL_PASSWORD</code></pre><p>Now when we run <code>kubectl get all</code> we get the following output:</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card kg-width-wide">
+    <pre class="command-line" data-user="tceadmin" data-host="jumpbox" data-output="2-19">
+<code class="language-command-line">kubectl get all         
+NAME                         READY   STATUS              RESTARTS   AGE
+pod/ghost-75dd96d9f9-gc7dv   0/1     ContainerCreating   0          22s
+pod/ghost-mysql-0            1/1     Running             0          5m35s
+
+NAME                           TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)        AGE
+service/ghost                  LoadBalancer   100.71.156.29   192.168.30.240   80:30201/TCP   5m36s
+service/ghost-mysql            ClusterIP      100.70.89.188   &lt;none&gt;           3306/TCP       5m36s
+service/ghost-mysql-headless   ClusterIP      None            &lt;none&gt;           3306/TCP       5m36s
+service/kubernetes             ClusterIP      100.64.0.1      &lt;none&gt;           443/TCP        5h33m
+
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/ghost   0/1     1            0           22s
+
+NAME                               DESIRED   CURRENT   READY   AGE
+replicaset.apps/ghost-75dd96d9f9   1         1         0       22s
+
+NAME                           READY   AGE
+statefulset.apps/ghost-mysql   1/1     5m35s</code>
+    </pre>
+</figure><!--kg-card-end: html--><p>Once the ghost pod is created and ready you can go to the LoadBalancer external IP in your web browser, and you should see the ghost homepage. </p><p>In our next post we&apos;ll discuss exposing the blog to the internet, including support for HTTPS.</p>]]></content:encoded></item><item><title><![CDATA[Post 1: Deploying Kubernetes]]></title><description><![CDATA[<p>We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is <strong>Kubernetes </strong>(or <strong>k8s</strong> as the cool kids call it). Standing up</p>]]></description><link>https://homelab.acgandhi.com/post-1-deploying-kubernetes/</link><guid isPermaLink="false">62e33b1803d6a7006882785b</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 01 Aug 2022 20:45:00 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/07/TCE-logo.svg" medium="image"/><content:encoded><![CDATA[<img src="https://homelab.acgandhi.com/content/images/2022/07/TCE-logo.svg" alt="Post 1: Deploying Kubernetes"><p>We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is <strong>Kubernetes </strong>(or <strong>k8s</strong> as the cool kids call it). Standing up full, managed, multi-node, high availability Kubernetes is often considered a daunting (or perhaps more accurately, dreaded) task. Having been designed to run workloads at Google scale, Kubernetes is quite complex. Luckily for us, VMware&#x2019;s Tanzu platform makes managing Kubernetes quite straightforward. <strong>Tanzu Community Edition (TCE)</strong> is the free, open source version of Tanzu that still has all of the core features we will need in our homelab deployment.</p><hr><h2 id="deployment-process-overview">Deployment process overview</h2><p>The deployment process for TCE uses a bootstrap machine which runs the Tanzu CLI.</p><p>Here&#x2019;s a high-level overview of the process:</p><!--kg-card-begin: html--><ol>
+	<li>tanzu management-cluster create&#x2026; is run on the bootstrap machine</li>
+	<li>Tanzu creates a bootstrap Kubernetes cluster on the bootstrap machine, using <abbr title="Kubernetes in Docker">kind</abbr>.</li>
+	<li>Providers are installed on the bootstrap cluster. These providers communicate with vSphere to provision VMs for the management cluster.</li>
+	<li>Management cluster VMs are created.</li>
+</ol><!--kg-card-end: html--><hr><h2 id="creating-the-bootstrap-machine">Creating the bootstrap machine</h2><p>Typically the bootstrap machine is your local computer. This requires certain software (like docker, kubectl, and the tanzu cli) to be installed on your machine. Instead of this, our bootstrap machine will be a VM on vSphere. We&#x2019;ll be using a cloud-init image of Ubuntu Server as its basis. This image will be customized with a yaml file, which will install all of the necessary dependencies and the Tanzu CLI for you.</p><p>Follow the instructions by Steve Wong <a href="https://github.com/cantbewong/k8shomelab/blob/main/tcejumpbox/JUMPBOXVM.md">here</a> to set up the bootstrap machine.</p><p><strong>Note:</strong> if you don&#x2019;t have VMware PowerCLI installed on your machine, you can just upload the OVAs to vSphere via the vCenter web ui.</p><h2 id="deploying-tce-vsphere-prerequisites">Deploying TCE: vSphere prerequisites</h2><p>Before deploying Tanzu, the following requirements must be met:</p><p><strong>vSphere</strong></p><ul><li>vSphere version: vSphere 6.7u3 or later, VMware Cloud on AWS, or Azure VMware Solution account</li><li>One of the following editions: vCenter Standard, vSphere Standard, vCenter Essentials, vSphere Essential, or vSphere Essentials Plus</li><li>A folder in which TCE can place its VMs. To create this, go to the VMs and Templates tab on vCenter, right click on your datacenter, and under New Folder select New VM and Template Folder. Give it a name (I called mine <code>TCEVMFolder</code>).</li></ul><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/vm-folder-creation-1.png" class="kg-image" alt="Post 1: Deploying Kubernetes" loading="lazy" width="1052" height="851" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/vm-folder-creation-1.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/07/vm-folder-creation-1.png 1000w, https://homelab.acgandhi.com/content/images/2022/07/vm-folder-creation-1.png 1052w" sizes="(min-width: 720px) 720px"><figcaption>Creating the VM folder.</figcaption></figure><ul><li><strong><strong><strong>Optional</strong></strong></strong> (but recommended): A resource pool in which TCE can place VMs. In the Hosts and Clusters tab, right click on the cluster in which you want to deploy TCE, then select New Resource pool. Give it a name (I called mine <code>RpTce</code>), and leave the other settings at their default values.</li></ul><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/rp-creation.png" class="kg-image" alt="Post 1: Deploying Kubernetes" loading="lazy" width="642" height="458" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/rp-creation.png 600w, https://homelab.acgandhi.com/content/images/2022/07/rp-creation.png 642w"><figcaption>Creating the resource pool.</figcaption></figure><ul><li>Check to make sure the datastore you are planning to use has sufficient storage for the control plane and worker node VMs.</li></ul><p><strong>Network</strong></p><!--kg-card-begin: markdown--><ul>
+<li>
+<p>A DHCP server to connect the cluster node VMs that Tanzu Community Edition deploys. The node VMs must be able to connect to vSphere.</p>
+</li>
+<li>
+<p>A set of available static virtual IP (VIP) addresses for the clusters that you create, one for each management and workload cluster. Each cluster requires a static IP address that is used to access the cluster&#x2019;s Kubernetes control plane.</p>
+<ul>
+<li>Make sure that these IP addresses are not in the DHCP range, but are in the same subnet as the DHCP range.</li>
+</ul>
+</li>
+<li>
+<p>Make sure that:</p>
+<ul>
+<li>Traffic is allowed out to vCenter Server from the network on which clusters will run.</li>
+<li>Traffic allowed between your local bootstrap machine and port 6443 of all VMs in the clusters you create. Port 6443 is where the Kubernetes API is exposed. In our case, the bootstrap machine will itself be a VM on vSphere.</li>
+<li>Traffic allowed between port 443 of all VMs in the clusters you create and vCenter Server. Port 443 is where the vCenter Server API is exposed.</li>
+</ul>
+</li>
+<li>
+<p>The Network Time Protocol (NTP) service running on all hosts, and the hosts running on UTC.</p>
+</li>
+</ul>
+<!--kg-card-end: markdown--><h3 id="creating-a-template-from-the-node-ova">Creating a template from the node OVA</h3><p>During the jumpbox step you should&#x2019;ve uploaded the <a href="https://customerconnect.vmware.com/downloads/get-download?downloadGroup=TCE-0120">node image from customer connect</a> to vSphere. Right click on your resource pool for TCE (or if you don&#x2019;t have one, on the cluster), then select New Virtual Machine. For creation type, select Deploy From Template, then select next. Select the node image OVA you uploaded. Review the details of the template, and accept the license agreement. Select the datastore on which you want TCE to place it&#x2019;s VMs. Here you can also change the disk format to &#x201C;Thin Provision&#x201D; to use less space. Then, select the network on which you want TCE to place its VMs (this does not have to be the same network as the jumpbox). Finally, click on finish.</p><p>Once the VM has finished being created <em><strong>do not</strong> power it on</em>. Right click the VM, and under template select &#x201C;Convert to Template.&#x201D; If you go to the VMs and Templates page you should see the template in the folder you selected. </p><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/vm-to-template.png" class="kg-image" alt="Post 1: Deploying Kubernetes" loading="lazy" width="1023" height="396" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/vm-to-template.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/07/vm-to-template.png 1000w, https://homelab.acgandhi.com/content/images/2022/07/vm-to-template.png 1023w" sizes="(min-width: 720px) 720px"><figcaption>Converting the deployed image to a template.</figcaption></figure><p>You are now ready to deploy vSphere. &#xA0;In your bootstrap/jumpbox VM as the <em>tceadmin</em> user, execute the following command:</p><figure class="kg-card kg-code-card"><pre><code>tanzu management-cluster create --ui --bind &lt;VM ip here&gt;:8080 --browser none</code></pre><figcaption>Replace <em>&lt;VM ip here&gt;</em> with the IP of the jumpbox VM.</figcaption></figure><p>This will start up the web ui, which you can access on your local machine with the port and IP you specified.</p><p>On the web ui, select vCenter. There are 8 parts to configuring the deployment:</p><ol><li>Enter the credentials for vCenter. <strong>Recommendation:</strong> use the TCE user account created as a part of <a href="https://github.com/cantbewong/k8shomelab/blob/main/tcejumpbox/JUMPBOXVM.md">jumpbox installation instructions</a>.</li><li>Select the number and type of nodes for the management cluster. <strong>Recommendation:</strong> development (single node) cluster of size medium or large for the control plane, and size large for the worker node. Choose smaller instances if your homelab is more resource constrained. Management cluster name can be whatever you want (in my case &#x201C;manclusname&#x201D;). Control plane IP should be an available static IP on the same subnet as the rest of the kubernetes network.</li><li>Leave as default (blank), unless using VMware NSX.</li><li>Leave as default (blank)</li><li>If you click on VM folder a dropdown should appear with all of the folders on vSphere. Select the one you created earlier for TCE (in my case TCEVMFolder). Select the datastore you want TCE to place the management cluster VMs on. Select the resource pool you created earlier for TCE (in my case, TceRp).</li><li>Select the network that the management cluster VMs will use. The <em>control plane IP</em> chosen earlier should be contained in this network. Cluster service and pod CIDRs can be left as default (unless you have existing networks that conflict with either).</li><li><strong>Optional:</strong> enter details for OIDC or LDAP. Click on the &#x201C;Enable Identity Management Settings&#x201D; toggle if you do not wish to.</li><li>Select the template that was created earlier from the node OVA. </li></ol><p>Once you click on Review Configuration, all of the settings that you entered will show up. At the bottom you can click on Deploy Management Cluster, which will start the deployment process.<br><strong>Optional (alternative method):</strong> Copy the command shown in the CLI command equivalent box. &#xA0;Stop running the kickstart UI (using ctrl+c). Then paste this command onto the terminal of the jumpbox VM. Here you can customize options of the command, including log verbosity (<code>-v 0-9</code>) and the timeout (<code>--timeout</code> or <code>-t</code>, default 30m, can be increased for slower internet connections). </p><p>Part way through the cluster creation process you should see 2 VMs be created on vSphere, one for the control plane and another for the worker node. Once the installation process is completed, you can run <code>kubectl get all -A</code> to see the pods, services, daemonsets, deployments, and replicasets created by Tanzu, running on the management cluster.</p><p>You are now ready to deploy your first workload.</p>]]></content:encoded></item><item><title><![CDATA[Post 0b: Prerequisite Software]]></title><description><![CDATA[<p>There were a few pieces of software that fell into the category of core infrastructure, i.e. software that will act as a foundation for the other software (including Kubernetes) in the system . This included a log server (a centralized location to collect logs from all over the network), an</p>]]></description><link>https://homelab.acgandhi.com/post-0b/</link><guid isPermaLink="false">62e84ced03d6a70068827973</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 01 Aug 2022 20:15:00 GMT</pubDate><media:content url="https://images.unsplash.com/photo-1519389950473-47ba0277781c?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDE0fHxzb2Z0d2FyZXxlbnwwfHx8fDE2NTk2NDcxNzU&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" medium="image"/><content:encoded><![CDATA[<img src="https://images.unsplash.com/photo-1519389950473-47ba0277781c?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDE0fHxzb2Z0d2FyZXxlbnwwfHx8fDE2NTk2NDcxNzU&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" alt="Post 0b: Prerequisite Software"><p>There were a few pieces of software that fell into the category of core infrastructure, i.e. software that will act as a foundation for the other software (including Kubernetes) in the system . This included a log server (a centralized location to collect logs from all over the network), an authentication/LDAP server (which will allow us to have shared usernames and passwords throughout the network), and a certificate authority. As a result, rather than running them as workloads on Kubernetes, they were run as VMs on vSphere.</p><p>Note: technically speaking, all of the software in this post is optional, but recommended. You can setup Kubernetes without LDAP and centralized logging.</p><h2 id="freeipa-a-certificate-authority-and-ldap-server">FreeIPA: a certificate authority and LDAP server</h2><p><em>Note: The authors are not entirely happy with FreeIPA and may update this section to use a different LDAP server in the future.</em></p><p>FreeIPA is a piece of software that integrates both a certificate authority and a LDAP server, and also has a convenient web interface to manage it all.</p><p>Unfortunately, since it&#x2019;s developed by Red Hat it only really works on their distros of Linux (such as RHEL, Cent OS, and Fedora). To host FreeIPA, I first created a Fedora Linux VM on vCenter (I used Fedora 36 Server). After connecting to this VM, I followed the steps of &#x201C;method one&#x201D; in <a href="https://linuxhint.com/configure-static-ip-address-fedora/">this article</a> to configure a static IP address for the VM. Once this is done, you should see the static IP address be displayed as the instance IP in vCenter. On the pfSense, I added a DNS record that points to the VM by going to Services &#x2192; DNS resolver, then adding an entry under &#x201C;Host Overrides&#x201D;.</p><p>Afterwards I ran the following commands to install FreeIPA:</p><pre><code>dnf install freeipa-server</code></pre><p>Then, to configure:</p><pre><code>ipa-server-install --ca-subject=&quot;CN=TCE Homelab Root CA, O=PRIVATE.TCEHOMELAB.COM&quot;</code></pre><p>Follow the onscreen prompts to configure the installation. The hostname you set for the server should be the one you configured in the DNS resolver of your router.</p><p>Afterwards, you should be able to go to the domain for the FreeIPA server (in my case auth.private.tcehomelab.com). There you will be greeted with a browser login box. Ignore this box, it doesn&#x2019;t work. Wait 10-15 seconds for the page to load, then press the cancel button (you may need to press cancel more than once, I usually just spam it). There you will be greeted with the actual login page, where you can enter the credentials you chose during the installation process. &#xA0;</p><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/08/freeipa-login-ignore.png" class="kg-image" alt="Post 0b: Prerequisite Software" loading="lazy" width="447" height="327"><figcaption>The login box to ignore.</figcaption></figure><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/08/freeipa-login.png" class="kg-image" alt="Post 0b: Prerequisite Software" loading="lazy" width="2000" height="973" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/freeipa-login.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/freeipa-login.png 1000w, https://homelab.acgandhi.com/content/images/size/w1600/2022/08/freeipa-login.png 1600w, https://homelab.acgandhi.com/content/images/size/w2400/2022/08/freeipa-login.png 2400w" sizes="(min-width: 720px) 720px"><figcaption>What the actual login page looks like.</figcaption></figure><p>In order to get FreeIPA to play nice with vSphere a number of schema modifications are needed. Follow <a href="https://cloudalbania.com/posts/2021-05-creating-new-openldap-server-with/#configure-freeipa-for-rfc4519-and-vsphere">this blog post</a> to configure FreeIPA for vSphere and add it as an authentication source.</p><h2 id="syslog-ng-core-logging-server">Syslog-ng: core logging server</h2><p>It should be noted at this time that this is the logging server for the rest of core infrastructure. Eventually, we will set up a much more capable logging stack on Kubernetes. However, if there is a problem with Kubernetes (or for that matter any of our other core infrastructure), then we need a place to look at the logs for it that isn&#x2019;t on Kubernetes. This is where syslog-ng, which we will be running on the pfSense router, comes into play.</p><p>First we will install the syslog-ng plugin on the pfSense by going to System &#x2192; Package Manager and then clicking on available packages. Afterwards, in the services menu there will be an item called &#x201C;Syslog-ng&#x201D; where syslog can be configured.</p><p>I created two sources for syslog-ng, one of which will be used to collect the logs from the pfSense, and another that will collect logs from the rest of the network. For the former source, I used the following configuration parameters:</p><ul><li>Interface Selection: loopback</li><li>Default Protocol: TLS</li><li>CA: pfSense CA (this is the one we created in the last post)</li><li>Certificate: pfsense web ui</li><li>Default Port: 5140</li><li>Default Log Directory: /var/syslog-ng</li><li>Default Log File: default.log</li><li>Archive Frequency, compression, and max archives were left at their defaults.</li></ul><p>Then, under the advanced tab, I added 3 entries to accept logs over lan:</p><ul><li>a source, called <code>s_lan</code>, with the following parameters:</li></ul><pre><code>{
+    network(
+        ip(&quot;192.168.1.1&quot;)
+        transport(&quot;tls&quot;)
+        port(1514)
+        tls(
+            peer-verify(required-trusted)
+            key-file(&apos;/var/etc/syslog-ng/syslog-ng.key&apos;)
+            cert-file(&apos;/var/etc/syslog-ng/syslog-ng.cert&apos;) 
+            ca-dir(&apos;/var/etc/syslog-ng/ca.d&apos;)
+        )
+    );
+};</code></pre><ul><li>a destination, called <code>d_lan</code>, with the following parameters:</li></ul><pre><code>{ file(&quot;/var/syslog-ng/lan.log&quot;); };</code></pre><ul><li>and finally a log object called <code>lan</code> to link the two:</li></ul><!--kg-card-begin: markdown--><pre><code>{ source(s_lan); destination(d_lan); };
+</code></pre>
+<!--kg-card-end: markdown--><p>Finally, follow <a href="https://www.syslog-ng.com/technical-documents/doc/syslog-ng-open-source-edition/3.24/administration-guide/61#TOPIC-1298103">these steps</a> to add a certificate authority to syslog ng. </p><p>We then had to setup ESXi to forward its logs to a remote syslog server.<br></p>]]></content:encoded></item><item><title><![CDATA[Post 0a: Prerequisite Hardware]]></title><description><![CDATA[<p>We&#x2019;ll assume you didn&#x2019;t win the lottery, and that cost is a factor. You do need some hardware, and with a limited budget, the choice is either used server equipment, or cost effective new equipment. Global shortages of electronic components has perhaps tilted the balance a</p>]]></description><link>https://homelab.acgandhi.com/post-0a/</link><guid isPermaLink="false">62e2dac703d6a70068827773</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Mon, 01 Aug 2022 20:05:00 GMT</pubDate><media:content url="https://homelab.acgandhi.com/content/images/2022/07/DSC00722-1.JPG" medium="image"/><content:encoded><![CDATA[<img src="https://homelab.acgandhi.com/content/images/2022/07/DSC00722-1.JPG" alt="Post 0a: Prerequisite Hardware"><p>We&#x2019;ll assume you didn&#x2019;t win the lottery, and that cost is a factor. You do need some hardware, and with a limited budget, the choice is either used server equipment, or cost effective new equipment. Global shortages of electronic components has perhaps tilted the balance a bit toward the used server option, but what we will be covering could run on either option.</p><h2 id="hardware-components">Hardware components</h2><ul><li>A Raspberry Pi</li><li>A dedicated small x86 for running a pfSense based router/firewall</li><li>A used, 10 year old server (Dell R710 with a couple upgrades)</li></ul><div class="kg-card kg-toggle-card" data-kg-toggle-state="close"><div class="kg-toggle-heading"><h4 class="kg-toggle-heading-text">Why the Pi?</h4><button class="kg-toggle-card-icon"><svg id="Regular" xmlns="http://www.w3.org/2000/svg" viewbox="0 0 24 24"><path class="cls-1" d="M23.25,7.311,12.53,18.03a.749.749,0,0,1-1.06,0L.75,7.311"/></svg></button></div><div class="kg-toggle-content"><p>We will be implementing some home automation requiring connections to physical IO devices, and we decided that using an external Pi is safer and easier than opening non default mappings and privileges to enable physical device access from VMs and Kubernetes pods. It can also offer a faster return to service after a power outage. Also it is cheap, well documented, readily available, small in physical size, and low in power consumption</p></div></div><div class="kg-card kg-toggle-card" data-kg-toggle-state="close"><div class="kg-toggle-heading"><h4 class="kg-toggle-heading-text">Why pfSense on dedicated hardware?</h4><button class="kg-toggle-card-icon"><svg id="Regular" xmlns="http://www.w3.org/2000/svg" viewbox="0 0 24 24"><path class="cls-1" d="M23.25,7.311,12.53,18.03a.749.749,0,0,1-1.06,0L.75,7.311"/></svg></button></div><div class="kg-toggle-content"><p>We want something better than most consumer grade routers because we will be using VLANs, and can use the integral plug-ins for DHCP, DNS, certificate management, and logging. This is a critical resource and we want this to start service early after a power outage - thus dedicated hardware is preferred to running this in a VM. The hardware required is not expensive. Minimum recommended: any 64-bit x86 compatible CPU, 4GB RAM, 64GB disk, 2 gigabit ethernet ports, USB port for install. You also want a managed switch that supports VLANs.</p><p>I&#x2019;m using a used Dell Edge Gateway from ebay, featuring an Intel Atom with 2 gigabit ethernet ports, and 8GB of memory with a small SSD. Alongside it I have a Mikrotik RB260GS 5 port switch.</p><p><strong>Alternatives to pfSense:</strong> <a href="https://opnsense.org/">OPNsense</a>, an existing router that supports VLANs</p></div></div><h2 id="choices-for-the-main-server">Choices for the main server</h2><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/DSC00718.jpg" class="kg-image" alt="Post 0a: Prerequisite Hardware" loading="lazy" width="2000" height="923" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/DSC00718.jpg 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/07/DSC00718.jpg 1000w, https://homelab.acgandhi.com/content/images/size/w1600/2022/07/DSC00718.jpg 1600w, https://homelab.acgandhi.com/content/images/size/w2400/2022/07/DSC00718.jpg 2400w" sizes="(min-width: 720px) 720px"><figcaption>Dell R710 being used as the main server.</figcaption></figure><p>This server will run ESXi to host VMs, including VMs that host a Kubernetes cluster.</p><p>You could buy new equipment such as an Intel NUC <a href="https://williamlam.com/2021/07/esxi-on-intel-nuc-11-extreme-beast-canyon.html">example</a>. or go the route of a used server from ebay, craigslist, or the bulletin board of a local colo. If you go the used route, you want something new enough to run vSphere version 7. &#xA0;</p><p>I am using a Dell R710 which is on the outer limit of being able to run vSphere 7. It requires a L5460 CPU swap and a H710 disk controller swap to support a vSphere install running in the unsupported, but functional, <a href="https://williamlam.com/?s=allowlegacy+cpu">allowLegacyCPU</a> mode. Chosen because used R710&#x2019;s are very cheap but you can spend more and get an easier vSphere install experience. Something less than 5 years old is likely to work without changes or install overrides.<br>I won&apos;t be covering vSphere installation here. A <a href="https://williamlam.com/2022/06/2022-vmug-advantage-community-group-buy.html">VMUG Advantage membership</a> is recommended as a means to get a vSphere license. vSphere also offers a <a href="https://customerconnect.vmware.com/web/vmware/evalcenter?p=vsphere-eval-7">60-day free trial</a>. <br></p><p>There were a few pieces of software that fell into the category of core infrastructure, i.e. software that will act as a foundation for the other software in the system (including Kubernetes itself). This included a log server (a centralized location to collect logs from all over the network), an authentication/LDAP server (which will allow us to have shared usernames and passwords throughout the network), and a certificate authority. As a result, rather than running these services as workloads on Kubernetes, they were run as VMs on vSphere.</p>]]></content:encoded></item><item><title><![CDATA[Homelab Introduction]]></title><description><![CDATA[<h3 id="one-of-the-main-conveniences-of-modern-life-is-the-ability-to-access-your-personal-and-professional-files-%E2%80%94-documents-photos-music-videos-and-more-%E2%80%94-wherever-you-are">One of the main conveniences of modern life is the ability to access your personal and professional files &#x2014; documents, photos, music, videos and more &#x2014; wherever you are.</h3><p>Google Workspace, Office 365, and other services offer increasingly popular alternatives to local storage on a computer, tablet, or smartphone, thanks</p>]]></description><link>https://homelab.acgandhi.com/homelab-introduction/</link><guid isPermaLink="false">62db13b6c4838b01579259c8</guid><dc:creator><![CDATA[Amar Gandhi]]></dc:creator><pubDate>Fri, 22 Jul 2022 21:40:20 GMT</pubDate><media:content url="https://images.unsplash.com/photo-1569428034239-f9565e32e224?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDJ8fGNsb3VkfGVufDB8fHx8MTY1ODUyNTUxMg&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" medium="image"/><content:encoded><![CDATA[<h3 id="one-of-the-main-conveniences-of-modern-life-is-the-ability-to-access-your-personal-and-professional-files-%E2%80%94-documents-photos-music-videos-and-more-%E2%80%94-wherever-you-are">One of the main conveniences of modern life is the ability to access your personal and professional files &#x2014; documents, photos, music, videos and more &#x2014; wherever you are.</h3><img src="https://images.unsplash.com/photo-1569428034239-f9565e32e224?crop=entropy&amp;cs=tinysrgb&amp;fit=max&amp;fm=jpg&amp;ixid=MnwxMTc3M3wwfDF8c2VhcmNofDJ8fGNsb3VkfGVufDB8fHx8MTY1ODUyNTUxMg&amp;ixlib=rb-1.2.1&amp;q=80&amp;w=2000" alt="Homelab Introduction"><p>Google Workspace, Office 365, and other services offer increasingly popular alternatives to local storage on a computer, tablet, or smartphone, thanks to the cross location and cross device access provided by the Internet. However, it is fair to question the safety, security, and economics of these cloud hosted services. </p><p>Some services openly indicate that they analyze your data, share it with third parties, and are free to change privacy terms in the future. There&#x2019;s historical precedent for data breaches, price increases, and even <a href="https://killedbygoogle.com/">total service shutdowns</a>.</p><p>If you want to enjoy the benefits of universal access while maintaining complete control over your own data, you might consider hosting and managing your own online services. The necessary software can be found in free available projects. This series is going to cover the process of hosting a curated list of free and open source software to run in your own homelab. </p><p>This will be a multi-part series that will cover shared data access with personal governance, along with privacy-respecting home automation, entertainment media hosting, and environment monitoring.</p><p>In the end I aim to create an enterprise-like deployment of this software, without compromises in regards to security, reliability, and ease-of-use. While this series of blog posts covering the deployment will be fairly technical, our end goal is to create a system that anyone, techies and non-techie family members alike can use, while keeping their data safe and secure.</p><p>This journey will also be an opportunity to learn about technology and general techniques that might be useful even in larger commercial applications if you work in the IT industry.</p><p><br></p>]]></content:encoded></item></channel></rss>

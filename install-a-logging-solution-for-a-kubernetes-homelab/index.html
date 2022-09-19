@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en" class="auto-color">
+<head>
+
+    <title>Post 5: Install a logging solution for a Kubernetes homelab</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/built/screen.css?v=1bb11d963f" />
+
+    <link rel="canonical" href="https://homelab.acgandhi.com/install-a-logging-solution-for-a-kubernetes-homelab/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <meta property="og:site_name" content="Tanzu Personal Homelab" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Post 5: Install a logging solution for a Kubernetes homelab" />
+    <meta property="og:description" content="Introduction - EfK stack on/for Kubernetes
+
+Observability is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and" />
+    <meta property="og:url" content="https://homelab.acgandhi.com/install-a-logging-solution-for-a-kubernetes-homelab/" />
+    <meta property="og:image" content="https://homelab.acgandhi.com/content/images/2022/08/elk-stack-3-elks-stacked.svg" />
+    <meta property="article:published_time" content="2022-08-24T00:37:42.000Z" />
+    <meta property="article:modified_time" content="2022-08-24T00:44:58.000Z" />
+    <meta property="article:tag" content="Kubernetes" />
+    <meta property="article:tag" content="Elasticsearch" />
+    <meta property="article:tag" content="Tanzu" />
+    <meta property="article:tag" content="Kibana" />
+    <meta property="article:tag" content="Fluentbit" />
+    <meta property="article:tag" content="Logstash" />
+    <meta property="article:tag" content="homelab" />
+    
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Post 5: Install a logging solution for a Kubernetes homelab" />
+    <meta name="twitter:description" content="Introduction - EfK stack on/for Kubernetes
+
+Observability is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and" />
+    <meta name="twitter:url" content="https://homelab.acgandhi.com/install-a-logging-solution-for-a-kubernetes-homelab/" />
+    <meta name="twitter:image" content="https://homelab.acgandhi.com/content/images/2022/08/elk-stack-3-elks-stacked.svg" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Steven Wong" />
+    <meta name="twitter:label2" content="Filed under" />
+    <meta name="twitter:data2" content="Kubernetes, Elasticsearch, Tanzu, Kibana, Fluentbit, Logstash, homelab" />
+    <meta property="og:image:width" content="555" />
+    <meta property="og:image:height" content="300" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Tanzu Personal Homelab",
+        "url": "https://homelab.acgandhi.com/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://homelab.acgandhi.com/favicon.ico"
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Steven Wong",
+        "image": {
+            "@type": "ImageObject",
+            "url": "https://www.gravatar.com/avatar/a262c099f0eec4c23deccb6a75acb738?s=250&r=x&d=mp",
+            "width": 250,
+            "height": 250
+        },
+        "url": "https://homelab.acgandhi.com/author/steven/",
+        "sameAs": []
+    },
+    "headline": "Post 5: Install a logging solution for a Kubernetes homelab",
+    "url": "https://homelab.acgandhi.com/install-a-logging-solution-for-a-kubernetes-homelab/",
+    "datePublished": "2022-08-24T00:37:42.000Z",
+    "dateModified": "2022-08-24T00:44:58.000Z",
+    "image": {
+        "@type": "ImageObject",
+        "url": "https://homelab.acgandhi.com/content/images/2022/08/elk-stack-3-elks-stacked.svg",
+        "width": 555,
+        "height": 300
+    },
+    "keywords": "Kubernetes, Elasticsearch, Tanzu, Kibana, Fluentbit, Logstash, homelab",
+    "description": "Introduction - EfK stack on/for Kubernetes\n\nObservability is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and services, identifying complex interactions between elements and allowing you to troubleshoot performance issues, improve management, and optimize cl",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://homelab.acgandhi.com/"
+    }
+}
+    </script>
+
+    <meta name="generator" content="Ghost 5.4" />
+    <link rel="alternate" type="application/rss+xml" title="Tanzu Personal Homelab" href="https://homelab.acgandhi.com/rss/" />
+    <script defer src="https://unpkg.com/@tryghost/portal@~2.3.0/umd/portal.min.js" data-ghost="https://homelab.acgandhi.com/" data-key="afcfa8006057ffdaa5f94c25ab" data-api="https://homelab.acgandhi.com/ghost/api/content/" crossorigin="anonymous"></script><style id="gh-members-styles">.gh-post-upgrade-cta-content,
+.gh-post-upgrade-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    text-align: center;
+    width: 100%;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.gh-post-upgrade-cta-content {
+    border-radius: 8px;
+    padding: 40px 4vw;
+}
+
+.gh-post-upgrade-cta h2 {
+    color: #ffffff;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+    margin: 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta p {
+    margin: 20px 0 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta small {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+}
+
+.gh-post-upgrade-cta a {
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a:hover {
+    color: #ffffff;
+    opacity: 0.8;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a.gh-btn {
+    display: block;
+    background: #ffffff;
+    text-decoration: none;
+    margin: 28px 0 0;
+    padding: 8px 18px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.gh-post-upgrade-cta a.gh-btn:hover {
+    opacity: 0.92;
+}</style>
+    <script defer src="https://unpkg.com/@tryghost/sodo-search@~1.0.0/umd/sodo-search.min.js" data-sodo-search="https://homelab.acgandhi.com/" data-version="1.0.0" data-key="afcfa8006057ffdaa5f94c25ab" crossorigin="anonymous"></script>
+    <script defer src="/public/cards.min.js?v=1bb11d963f"></script>
+    <link rel="stylesheet" type="text/css" href="/public/cards.min.css?v=1bb11d963f">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.css" integrity="sha512-EgIkdlA87NL5dPmI6HztTCpg7XKfZRFQHbpEdDF3hCT45HjjmIJOx8K73r+YZha0vKyOcMpzC7fZ4RajCX25tg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-nord.min.css" integrity="sha256-TYVlEye0UX2UYZXVmmY5XzlUoLuncTy6j+aq5bqZm8g=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.css" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+    /* Margin after figures with caption? */
+    .gh-content .kg-card+:not(.kg-card), .gh-content :not(.kg-card):not([id])+.kg-card {
+        margin-top: 3vmin;
+    }
+    
+	/* Figure Captions */
+    figcaption {
+        font-size: 1.4rem;
+        line-height: 1.5em;
+        padding-top: 1rem;
+        color: #505050;
+    }    
+    /* Code cards */
+    ::selection {
+        color: var(--color-darkgrey) !important;
+    }
+    
+    figure.kg-code-card, .code-toolbar {
+        margin-top: 8px !important;
+    }
+    figure.kg-card.kg-code-card.kg-width-wide {
+        max-width: 90vw; /* hack */
+    }
+    .token.comment {
+		color: #9aa3b6;
+    }
+    span.command-line-prompt {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+	span.command-line-prompt > span {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+</style><style>:root {--ghost-accent-color: #29B6F6;}</style>
+
+</head>
+<body class="post-template tag-kubernetes tag-elasticsearch tag-tanzu tag-kibana tag-fluentbit tag-logstash tag-homelab has-sans-body">
+<div class="viewport">
+
+    <header id="gh-head" class="gh-head outer">
+        <nav class="gh-head-inner inner">
+
+            <div class="gh-head-brand">
+                <a class="gh-head-logo no-image" href="https://homelab.acgandhi.com">
+                        Tanzu Personal Homelab
+                </a>
+                <div class="gh-head-brand-wrapper">
+                    <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                    <a class="gh-burger" role="button">
+                        <div class="gh-burger-box">
+                            <div class="gh-burger-inner"></div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            <div class="gh-head-menu">
+                <ul class="nav">
+    <li class="nav-home"><a href="https://homelab.acgandhi.com/">Home</a></li>
+    <li class="nav-about"><a href="https://homelab.acgandhi.com/about/">About</a></li>
+</ul>
+
+            </div>
+            <div class="gh-head-actions">
+                <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                <div class="gh-social">
+                </div>
+                        <a class="gh-head-button" href="#/portal/signup" data-portal="signup">Subscribe</a>
+            </div>
+        </nav>
+    </header>
+
+    <div class="site-content">
+        
+
+
+
+<main id="site-main" class="site-main">
+<article class="article post tag-kubernetes tag-elasticsearch tag-tanzu tag-kibana tag-fluentbit tag-logstash tag-homelab image-small">
+
+    <header class="article-header gh-canvas">
+
+        <div class="article-tag post-card-tags">
+                <span class="post-card-primary-tag">
+                    <a href="/tag/kubernetes/">Kubernetes</a>
+                </span>
+        </div>
+
+        <h1 class="article-title">Post 5: Install a logging solution for a Kubernetes homelab</h1>
+
+
+        <div class="article-byline">
+        <section class="article-byline-content">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+                    <a href="/author/steven/" class="author-avatar">
+                        <img class="author-profile-image" src="https://www.gravatar.com/avatar/a262c099f0eec4c23deccb6a75acb738?s&#x3D;250&amp;r&#x3D;x&amp;d&#x3D;mp" alt="Steven Wong" />
+                    </a>
+                </li>
+                <li class="author-list-item">
+                    <a href="/author/acgandhi/" class="author-avatar">
+                        <img class="author-profile-image" src="/content/images/size/w100/2022/07/Untitled.jpg" alt="Amar Gandhi" />
+                    </a>
+                </li>
+            </ul>
+
+            <div class="article-byline-meta">
+                <h4 class="author-name"><a href="/author/steven/">Steven Wong</a>, <a href="/author/acgandhi/">Amar Gandhi</a></h4>
+                <div class="byline-meta-content">
+                    <time class="byline-meta-date" datetime="2022-08-23">Aug 23, 2022</time>
+                        <span class="byline-reading-time"><span class="bull">&bull;</span> 5 min read</span>
+                </div>
+            </div>
+
+        </section>
+        </div>
+
+            <figure class="article-image">
+                <img
+                    srcset="/content/images/size/w300/2022/08/elk-stack-3-elks-stacked.svg 300w,
+                            /content/images/size/w600/2022/08/elk-stack-3-elks-stacked.svg 600w,
+                            /content/images/size/w1000/2022/08/elk-stack-3-elks-stacked.svg 1000w,
+                            /content/images/size/w2000/2022/08/elk-stack-3-elks-stacked.svg 2000w"
+                    sizes="(min-width: 1400px) 1400px, 92vw"
+                    src="/content/images/size/w2000/2022/08/elk-stack-3-elks-stacked.svg"
+                    alt="Post 5: Install a logging solution for a Kubernetes homelab"
+                />
+                    <figcaption>ELK stack. <em>Source: https://www.elastic.co/what-is/elk-stack</em>&nbsp;</figcaption>
+            </figure>
+
+    </header>
+
+    <section class="gh-content gh-canvas">
+        <h2 id="introductionefk-stack-onfor-kubernetes">Introduction - EfK stack on/for Kubernetes</h2><p><a href="https://tanzu.vmware.com/what-is-observability">Observability</a> is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and services, identifying complex interactions between elements and allowing you to troubleshoot performance issues, improve management, and optimize cloud native infrastructure and applications.</p><p>This article covers running a logging solution hosted on, and supporting Kubernetes. </p><div class="kg-card kg-callout-card kg-callout-card-yellow"><div class="kg-callout-emoji">⚠️</div><div class="kg-callout-text">This type of logging stack is rather resource intensive to run. We strongly recommend deploying to a cluster with 3 nodes (or more).</div></div><p><strong>ELK </strong>is an acronym that describes a popular “stack” of open source components used to implement an n-tier logging solution with search, analytics and user interface. <strong>E</strong>=<a href="https://github.com/elastic/elasticsearch">elasticsearch</a>, <strong>L</strong>=<a href="https://github.com/elastic/logstash">Logstash</a>, and <strong>K</strong>=<a href="https://github.com/elastic/kibana">Kibana</a>. With Kubernetes it is often popular to swap out the <strong>L</strong>=Logstash component for <strong>f</strong>=<a href="https://github.com/fluent/fluent-bit">fluentbit</a> (aka <strong>EfK stack</strong>).</p><p>This substitution is popular because fluentbit is <a href="https://www.cncf.io/blog/2022/02/10/logstash-fluentd-fluent-bit-or-vector-how-to-choose-the-right-open-source-log-collector/">comparatively very light on resource demands</a> (important because log collection elements run on every Kubernetes cluster node) and because it has a set of configurable input plugins that support gathering logs from Kubernetes itself plus the containers Kubernetes is hosting.</p><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/08/efk-stack-picture-1.png" class="kg-image" alt loading="lazy" width="1158" height="620" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/08/efk-stack-picture-1.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/08/efk-stack-picture-1.png 1000w, https://homelab.acgandhi.com/content/images/2022/08/efk-stack-picture-1.png 1158w" sizes="(min-width: 720px) 720px"><figcaption><em>EFK stack</em> components</figcaption></figure><h2 id="install-elasticsearch-and-kibana-using-a-helm-chart">Install ElasticSearch and Kibana using a helm chart</h2><p>The <a href="https://www.elastic.co/webinars/elasticsearch-architecture-best-practices">best practice</a> is to use seven pods in the Elasticsearch cluster:</p><ul><li>Three master pods for managing the cluster.</li><li>Two data pods for storing data and processing queries.</li><li>Two client (or coordinating) pods for directing traffic. The “official” helm chart from <a href="https://github.com/elastic/helm-charts">elastic</a> involves a multi-step process to do a horizontally scaled configuration like this so we are using the helm chart from <a href="https://github.com/bitnami/charts/tree/master/bitnami/elasticsearch/">bitnami</a> instead.</li></ul><p>Add the Bitnami helm repo if you don't already have it from a previous service installation:</p><pre><code class="language-text">helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update</code></pre><p>This example assumes you have a storage class pre-defined, named <code>silver</code>, and have a service load balancer in place. Adjust the steps as needed.</p><pre><code class="language-bash"># create namespace
+kubectl create ns kube-logging
+
+# install
+helm install elasticsearch bitnami/elasticsearch -n kube-logging --set global.storageClass=silver,global.kibanaEnabled=true,service.type=LoadBalancer,kibana.service.type=LoadBalancer,master.replicas=3,coordinating.service.type=LoadBalancer</code></pre><h2 id="install-fluentbit-using-a-carvel-package">Install Fluentbit using a Carvel package</h2><p>To feed logs from Kubernetes to the Elasticsearch, Kibana combo - <a href="https://fluentbit.io/">fluentbit</a> will be used. This will cover an install using the Carvel based package option built into <a href="https://tanzucommunityedition.io/docs/v0.12/package-management/">Tanzu Community Edition</a>. If you are on a Kubernetes distribution that does not support <a href="https://carvel.dev/">Carvel</a>, then a <a href="https://github.com/fluent/helm-charts/tree/main/charts/fluent-bit">fluent bit install using helm</a> with similar settings should work.</p><p>First a yaml file is composed to set inputs, outputs, parsers and filters appropriate for Kubernetes log collection.</p><pre><code class="language-yaml">cat &lt;&lt; EOF &gt; fluent-bit-data-values.yaml
+namespace: "kube-logging"
+fluent_bit:
+  config:
+    service: |
+      [Service]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+    outputs: |
+     [OUTPUT]
+       Name            es
+       Match           *
+       Host            elasticsearch
+       Port            9200
+       Logstash_Format On
+       Replace_Dots    On
+       Retry_Limit     False
+       Buffer_Size     64KB
+       Suppress_Type_Name On
+
+    inputs: |
+      [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*.log
+        Parser            cri
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+      [INPUT]
+        Name                systemd
+        Tag                 kube_systemd.*
+        Path                /var/log/journal
+        DB                  /var/log/flb_kube_systemd.db
+        Systemd_Filter      _SYSTEMD_UNIT=kubelet.service
+        Systemd_Filter      _SYSTEMD_UNIT=containerd.service
+        Read_From_Tail      On
+        Strip_Underscores   On
+
+    filters: |
+      [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Kube_Tag_Prefix     kube.var.log.containers.
+        Merge_Log           On
+        Merge_Log_Key       log_processed
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude On
+
+    parsers: |
+      # see https://github.com/fluent/fluent-bit/blob/v1.7.5/conf/parsers.conf
+      [PARSER]
+        Name   apache
+        Format regex
+        Regex  ^(?&lt;host&gt;[^ ]*) [^ ]* (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] "(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^\"]*?)(?: +\S*)?)?" (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: "(?&lt;referer&gt;[^\"]*)" "(?&lt;agent&gt;[^\"]*)")?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   apache2
+        Format regex
+        Regex  ^(?&lt;host&gt;[^ ]*) [^ ]* (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] "(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^ ]*) +\S*)?" (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: "(?&lt;referer&gt;[^\"]*)" "(?&lt;agent&gt;[^\"]*)")?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   apache_error
+        Format regex
+        Regex  ^\[[^ ]* (?&lt;time&gt;[^\]]*)\] \[(?&lt;level&gt;[^\]]*)\](?: \[pid (?&lt;pid&gt;[^\]]*)\])?( \[client (?&lt;client&gt;[^\]]*)\])? (?&lt;message&gt;.*)$
+
+      [PARSER]
+        Name   nginx
+        Format regex
+        Regex ^(?&lt;remote&gt;[^ ]*) (?&lt;host&gt;[^ ]*) (?&lt;user&gt;[^ ]*) \[(?&lt;time&gt;[^\]]*)\] "(?&lt;method&gt;\S+)(?: +(?&lt;path&gt;[^\"]*?)(?: +\S*)?)?" (?&lt;code&gt;[^ ]*) (?&lt;size&gt;[^ ]*)(?: "(?&lt;referer&gt;[^\"]*)" "(?&lt;agent&gt;[^\"]*)")?$
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name   json
+        Format json
+        Time_Key time
+        Time_Format %d/%b/%Y:%H:%M:%S %z
+
+      [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name        docker-daemon
+        Format      regex
+        Regex       time="(?&lt;time&gt;[^ ]*)" level=(?&lt;level&gt;[^ ]*) msg="(?&lt;msg&gt;[^ ].*)"
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        # http://rubular.com/r/tjUt3Awgg4
+        Name cri
+        Format regex
+        Regex ^(?&lt;time&gt;[^ ]+) (?&lt;stream&gt;stdout|stderr) (?&lt;logtag&gt;[^ ]*) (?&lt;message&gt;.*)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+      [PARSER]
+        Name        logfmt
+        Format      logfmt
+
+      [PARSER]
+        Name        syslog-rfc5424
+        Format      regex
+        Regex       ^\&lt;(?&lt;pri&gt;[0-9]{1,5})\&gt;1 (?&lt;time&gt;[^ ]+) (?&lt;host&gt;[^ ]+) (?&lt;ident&gt;[^ ]+) (?&lt;pid&gt;[-0-9]+) (?&lt;msgid&gt;[^ ]+) (?&lt;extradata&gt;(\[(.*)\]|-)) (?&lt;message&gt;.+)$
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name        syslog-rfc3164-local
+        Format      regex
+        Regex       ^\&lt;(?&lt;pri&gt;[0-9]+)\&gt;(?&lt;time&gt;[^ ]* {1,2}[^ ]* [^ ]*) (?&lt;ident&gt;[a-zA-Z0-9_\/\.\-]*)(?:\[(?&lt;pid&gt;[0-9]+)\])?(?:[^\:]*\:)? *(?&lt;message&gt;.*)$
+        Time_Key    time
+        Time_Format %b %d %H:%M:%S
+        Time_Keep   On
+
+      [PARSER]
+        Name        syslog-rfc3164
+        Format      regex
+        Regex       /^\&lt;(?&lt;pri&gt;[0-9]+)\&gt;(?&lt;time&gt;[^ ]* {1,2}[^ ]* [^ ]*) (?&lt;host&gt;[^ ]*) (?&lt;ident&gt;[a-zA-Z0-9_\/\.\-]*)(?:\[(?&lt;pid&gt;[0-9]+)\])?(?:[^\:]*\:)? *(?&lt;message&gt;.*)$/
+        Time_Key    time
+        Time_Format %b %d %H:%M:%S
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On
+
+      [PARSER]
+        Name    kube-custom
+        Format  regex
+        Regex   (?&lt;tag&gt;[^.]+)?\.?(?&lt;pod_name&gt;[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?&lt;namespace_name&gt;[^_]+)_(?&lt;container_name&gt;.+)-(?&lt;docker_id&gt;[a-z0-9]{64})\.log$
+
+    streams: ""
+    plugins: ""
+
+  daemonset:
+    resources: { }
+    podAnnotations: { }
+    podLabels: { }
+EOF</code></pre><pre><code class="language-text">tanzu package install fluent-bit --package-name fluent-bit.community.tanzu.vmware.com --version 1.7.5 --namespace kube-logging --values-file fluent-bit-data-values.yaml</code></pre><h2 id="examine-logs-using-the-kibana-ui">Examine logs using the Kibana UI</h2><p>Wait for all pods in the <code>kube-logging</code> namespace to start.</p><ol><li>Use <code>kubectl get svc -n kube-logging</code> to get the external load balanced ip of the kibana ui.</li><li>Open <code>http://&lt;<em>kibana ip</em>&gt;:5601</code>  in a browser</li><li>Dismiss the integration popup, click on the menu on the left, then discover</li><li>Create a data view</li><li>Set index pattern to  logstash-* Note that the trailing asterisk will be added automatically</li><li>Choose @timestamp from dropdown.</li><li>Choose discover and select “last 15 minutes”. You should see log entries. Refer to the <a href="https://www.elastic.co/guide/index.html">ElasticSearch/Kibana online docs</a> or videos for more details on how this can be used</li></ol>
+    </section>
+
+
+</article>
+</main>
+
+    <section class="footer-cta outer">
+        <div class="inner">
+            <h2 class="footer-cta-title">Sign up for more like this.</h2>
+            <a class="footer-cta-button" href="#/portal" data-portal>
+                <div class="footer-cta-input">Enter your email</div>
+                <span>Subscribe</span>
+            </a>
+        </div>
+    </section>
+
+
+
+            <aside class="read-more-wrap outer">
+                <div class="read-more inner">
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-6-home-automation/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/Z-Wave_logo.svg 300w,
+                    /content/images/size/w600/2022/08/Z-Wave_logo.svg 600w,
+                    /content/images/size/w1000/2022/08/Z-Wave_logo.svg 1000w,
+                    /content/images/size/w2000/2022/08/Z-Wave_logo.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/Z-Wave_logo.svg"
+            alt="Z-Wave logo"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-6-home-automation/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)
+                </h2>
+            </header>
+                <div class="post-card-excerpt">Home automation is one of the key focuses of my project, as it's one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It's also unusual to see Kubernetes handling this; most k8s demos tend to be a bit</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-09-18">Sep 18, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">4 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-4-harbor-container-registry/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/harbor-horizontal-color.png 300w,
+                    /content/images/size/w600/2022/08/harbor-horizontal-color.png 600w,
+                    /content/images/size/w1000/2022/08/harbor-horizontal-color.png 1000w,
+                    /content/images/size/w2000/2022/08/harbor-horizontal-color.png 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/harbor-horizontal-color.png"
+            alt="Harbor Log"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-4-harbor-container-registry/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 4: Harbor Container Registry
+                </h2>
+            </header>
+                <div class="post-card-excerpt">What is Harbor?
+
+Harbor is a container registry, i.e. a system which manages container images which can then be used by Kubernetes. It is a self-hosted alternative to a cloud based service like Docker Hub.
+
+
+Why do we want to use Harbor (vs a cloud registry like Docker Hub)</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-22">Aug 22, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">5 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-3-https-public-ghost/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/kubernetes-internet.svg 300w,
+                    /content/images/size/w600/2022/08/kubernetes-internet.svg 600w,
+                    /content/images/size/w1000/2022/08/kubernetes-internet.svg 1000w,
+                    /content/images/size/w2000/2022/08/kubernetes-internet.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/kubernetes-internet.svg"
+            alt="Kubernetes logo with back and forth arrows to the internet."
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-3-https-public-ghost/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 3: Exposing Kubernetes to the internet with Cloudflare tunnels
+                </h2>
+            </header>
+                <div class="post-card-excerpt">In the last post we deployed Ghost, a content management system for a blog. In this article we'll be discussing ways to expose our blog to the internet.
+
+The traditional way to expose something running on a home network to the internet would be to punch a hole through the</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-15">Aug 15, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">6 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                </div>
+            </aside>
+
+
+
+    </div>
+
+    <footer class="site-footer outer">
+        <div class="inner">
+            <section class="copyright"><a href="https://homelab.acgandhi.com">Tanzu Personal Homelab</a> &copy; 2022</section>
+            <nav class="site-footer-nav">
+                <ul class="nav">
+    <li class="nav-sign-up"><a href="#/portal/">Sign up</a></li>
+</ul>
+
+            </nav>
+            <div><a href="https://ghost.org/" target="_blank" rel="noopener">Powered by Ghost</a></div>
+        </div>
+    </footer>
+
+</div>
+
+
+<script
+    src="https://code.jquery.com/jquery-3.5.1.min.js"
+    integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0="
+    crossorigin="anonymous">
+</script>
+<script src="/assets/built/casper.js?v=1bb11d963f"></script>
+<script>
+$(document).ready(function () {
+    // Mobile Menu Trigger
+    $('.gh-burger').click(function () {
+        $('body').toggleClass('gh-head-open');
+    });
+    // FitVids - Makes video embeds responsive
+    $(".gh-content").fitVids();
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js" integrity="sha512-9khQRAUBYEJDCDVP2yw3LRUQvjJ0Pjx0EShmaQjcHa6AXiOv6qHQu9lCAIR8O+/D8FtaCoJ2c0Tf9Xo7hYH01Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js" integrity="sha512-fTl/qcO1VgvKtOMApX2PdZzkziyr2stM65GYPLGuYMnuMm1z2JLJG6XVU7C/mR+E7xBUqCivykuhlzfqxXBXbg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.js" integrity="sha512-6nsaJ4jytF/0bh+5QJY4SOLuZZmcd/TAXHBkLIX/SH1ENpWezpQDJ4LpK2D1IfpjKVyhJQQaNSSvfsQjuYfTow==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en" class="auto-color">
+<head>
+
+    <title>Post 1: Deploying Kubernetes</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/built/screen.css?v=1bb11d963f" />
+
+    <link rel="canonical" href="https://homelab.acgandhi.com/post-1-deploying-kubernetes/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <meta property="og:site_name" content="Tanzu Personal Homelab" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Post 1: Deploying Kubernetes" />
+    <meta property="og:description" content="We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is Kubernetes (or k8s as the cool kids call it). Standing up" />
+    <meta property="og:url" content="https://homelab.acgandhi.com/post-1-deploying-kubernetes/" />
+    <meta property="og:image" content="https://homelab.acgandhi.com/content/images/2022/07/TCE-logo.svg" />
+    <meta property="article:published_time" content="2022-08-01T20:45:00.000Z" />
+    <meta property="article:modified_time" content="2022-08-05T00:33:37.000Z" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Post 1: Deploying Kubernetes" />
+    <meta name="twitter:description" content="We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is Kubernetes (or k8s as the cool kids call it). Standing up" />
+    <meta name="twitter:url" content="https://homelab.acgandhi.com/post-1-deploying-kubernetes/" />
+    <meta name="twitter:image" content="https://homelab.acgandhi.com/content/images/2022/07/TCE-logo.svg" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Amar Gandhi" />
+    <meta property="og:image:width" content="600" />
+    <meta property="og:image:height" content="153" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Tanzu Personal Homelab",
+        "url": "https://homelab.acgandhi.com/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://homelab.acgandhi.com/favicon.ico"
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Amar Gandhi",
+        "image": {
+            "@type": "ImageObject",
+            "url": "https://homelab.acgandhi.com/content/images/2022/07/Untitled.jpg",
+            "width": 510,
+            "height": 509
+        },
+        "url": "https://homelab.acgandhi.com/author/acgandhi/",
+        "sameAs": []
+    },
+    "headline": "Post 1: Deploying Kubernetes",
+    "url": "https://homelab.acgandhi.com/post-1-deploying-kubernetes/",
+    "datePublished": "2022-08-01T20:45:00.000Z",
+    "dateModified": "2022-08-05T00:33:37.000Z",
+    "image": {
+        "@type": "ImageObject",
+        "url": "https://homelab.acgandhi.com/content/images/2022/07/TCE-logo.svg",
+        "width": 600,
+        "height": 153
+    },
+    "description": "We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is Kubernetes (or k8s as the cool kids call it). Standing up full, managed, multi-node, high availability Kubernetes is often considered a daunting (or perhaps more accurately, dreaded) task. Having been designed to run workloads at Google scale, Kubernetes is quite complex. Luckily for us, VMware’s",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://homelab.acgandhi.com/"
+    }
+}
+    </script>
+
+    <meta name="generator" content="Ghost 5.4" />
+    <link rel="alternate" type="application/rss+xml" title="Tanzu Personal Homelab" href="https://homelab.acgandhi.com/rss/" />
+    <script defer src="https://unpkg.com/@tryghost/portal@~2.3.0/umd/portal.min.js" data-ghost="https://homelab.acgandhi.com/" data-key="afcfa8006057ffdaa5f94c25ab" data-api="https://homelab.acgandhi.com/ghost/api/content/" crossorigin="anonymous"></script><style id="gh-members-styles">.gh-post-upgrade-cta-content,
+.gh-post-upgrade-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    text-align: center;
+    width: 100%;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.gh-post-upgrade-cta-content {
+    border-radius: 8px;
+    padding: 40px 4vw;
+}
+
+.gh-post-upgrade-cta h2 {
+    color: #ffffff;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+    margin: 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta p {
+    margin: 20px 0 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta small {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+}
+
+.gh-post-upgrade-cta a {
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a:hover {
+    color: #ffffff;
+    opacity: 0.8;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a.gh-btn {
+    display: block;
+    background: #ffffff;
+    text-decoration: none;
+    margin: 28px 0 0;
+    padding: 8px 18px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.gh-post-upgrade-cta a.gh-btn:hover {
+    opacity: 0.92;
+}</style>
+    <script defer src="https://unpkg.com/@tryghost/sodo-search@~1.0.0/umd/sodo-search.min.js" data-sodo-search="https://homelab.acgandhi.com/" data-version="1.0.0" data-key="afcfa8006057ffdaa5f94c25ab" crossorigin="anonymous"></script>
+    <script defer src="/public/cards.min.js?v=1bb11d963f"></script>
+    <link rel="stylesheet" type="text/css" href="/public/cards.min.css?v=1bb11d963f">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.css" integrity="sha512-EgIkdlA87NL5dPmI6HztTCpg7XKfZRFQHbpEdDF3hCT45HjjmIJOx8K73r+YZha0vKyOcMpzC7fZ4RajCX25tg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-nord.min.css" integrity="sha256-TYVlEye0UX2UYZXVmmY5XzlUoLuncTy6j+aq5bqZm8g=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.css" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+    /* Margin after figures with caption? */
+    .gh-content .kg-card+:not(.kg-card), .gh-content :not(.kg-card):not([id])+.kg-card {
+        margin-top: 3vmin;
+    }
+    
+	/* Figure Captions */
+    figcaption {
+        font-size: 1.4rem;
+        line-height: 1.5em;
+        padding-top: 1rem;
+        color: #505050;
+    }    
+    /* Code cards */
+    ::selection {
+        color: var(--color-darkgrey) !important;
+    }
+    
+    figure.kg-code-card, .code-toolbar {
+        margin-top: 8px !important;
+    }
+    figure.kg-card.kg-code-card.kg-width-wide {
+        max-width: 90vw; /* hack */
+    }
+    .token.comment {
+		color: #9aa3b6;
+    }
+    span.command-line-prompt {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+	span.command-line-prompt > span {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+</style><style>:root {--ghost-accent-color: #29B6F6;}</style>
+
+</head>
+<body class="post-template has-sans-body">
+<div class="viewport">
+
+    <header id="gh-head" class="gh-head outer">
+        <nav class="gh-head-inner inner">
+
+            <div class="gh-head-brand">
+                <a class="gh-head-logo no-image" href="https://homelab.acgandhi.com">
+                        Tanzu Personal Homelab
+                </a>
+                <div class="gh-head-brand-wrapper">
+                    <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                    <a class="gh-burger" role="button">
+                        <div class="gh-burger-box">
+                            <div class="gh-burger-inner"></div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            <div class="gh-head-menu">
+                <ul class="nav">
+    <li class="nav-home"><a href="https://homelab.acgandhi.com/">Home</a></li>
+    <li class="nav-about"><a href="https://homelab.acgandhi.com/about/">About</a></li>
+</ul>
+
+            </div>
+            <div class="gh-head-actions">
+                <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                <div class="gh-social">
+                </div>
+                        <a class="gh-head-button" href="#/portal/signup" data-portal="signup">Subscribe</a>
+            </div>
+        </nav>
+    </header>
+
+    <div class="site-content">
+        
+
+
+
+<main id="site-main" class="site-main">
+<article class="article post image-small">
+
+    <header class="article-header gh-canvas">
+
+        <div class="article-tag post-card-tags">
+        </div>
+
+        <h1 class="article-title">Post 1: Deploying Kubernetes</h1>
+
+
+        <div class="article-byline">
+        <section class="article-byline-content">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+                    <a href="/author/acgandhi/" class="author-avatar">
+                        <img class="author-profile-image" src="/content/images/size/w100/2022/07/Untitled.jpg" alt="Amar Gandhi" />
+                    </a>
+                </li>
+            </ul>
+
+            <div class="article-byline-meta">
+                <h4 class="author-name"><a href="/author/acgandhi/">Amar Gandhi</a></h4>
+                <div class="byline-meta-content">
+                    <time class="byline-meta-date" datetime="2022-08-01">Aug 1, 2022</time>
+                        <span class="byline-reading-time"><span class="bull">&bull;</span> 6 min read</span>
+                </div>
+            </div>
+
+        </section>
+        </div>
+
+            <figure class="article-image">
+                <img
+                    srcset="/content/images/size/w300/2022/07/TCE-logo.svg 300w,
+                            /content/images/size/w600/2022/07/TCE-logo.svg 600w,
+                            /content/images/size/w1000/2022/07/TCE-logo.svg 1000w,
+                            /content/images/size/w2000/2022/07/TCE-logo.svg 2000w"
+                    sizes="(min-width: 1400px) 1400px, 92vw"
+                    src="/content/images/size/w2000/2022/07/TCE-logo.svg"
+                    alt="VMware Tanzu Community Edition logo."
+                />
+                    <figcaption>VMware Tanzu Community Edition logo.</figcaption>
+            </figure>
+
+    </header>
+
+    <section class="gh-content gh-canvas">
+        <p>We have a laundry list of services that we need to run, and we need a way to organize the running of them all. One of the hottest new technologies in the field for orchestrating applications at scale is <strong>Kubernetes </strong>(or <strong>k8s</strong> as the cool kids call it). Standing up full, managed, multi-node, high availability Kubernetes is often considered a daunting (or perhaps more accurately, dreaded) task. Having been designed to run workloads at Google scale, Kubernetes is quite complex. Luckily for us, VMware’s Tanzu platform makes managing Kubernetes quite straightforward. <strong>Tanzu Community Edition (TCE)</strong> is the free, open source version of Tanzu that still has all of the core features we will need in our homelab deployment.</p><hr><h2 id="deployment-process-overview">Deployment process overview</h2><p>The deployment process for TCE uses a bootstrap machine which runs the Tanzu CLI.</p><p>Here’s a high-level overview of the process:</p><!--kg-card-begin: html--><ol>
+	<li>tanzu management-cluster create… is run on the bootstrap machine</li>
+	<li>Tanzu creates a bootstrap Kubernetes cluster on the bootstrap machine, using <abbr title="Kubernetes in Docker">kind</abbr>.</li>
+	<li>Providers are installed on the bootstrap cluster. These providers communicate with vSphere to provision VMs for the management cluster.</li>
+	<li>Management cluster VMs are created.</li>
+</ol><!--kg-card-end: html--><hr><h2 id="creating-the-bootstrap-machine">Creating the bootstrap machine</h2><p>Typically the bootstrap machine is your local computer. This requires certain software (like docker, kubectl, and the tanzu cli) to be installed on your machine. Instead of this, our bootstrap machine will be a VM on vSphere. We’ll be using a cloud-init image of Ubuntu Server as its basis. This image will be customized with a yaml file, which will install all of the necessary dependencies and the Tanzu CLI for you.</p><p>Follow the instructions by Steve Wong <a href="https://github.com/cantbewong/k8shomelab/blob/main/tcejumpbox/JUMPBOXVM.md">here</a> to set up the bootstrap machine.</p><p><strong>Note:</strong> if you don’t have VMware PowerCLI installed on your machine, you can just upload the OVAs to vSphere via the vCenter web ui.</p><h2 id="deploying-tce-vsphere-prerequisites">Deploying TCE: vSphere prerequisites</h2><p>Before deploying Tanzu, the following requirements must be met:</p><p><strong>vSphere</strong></p><ul><li>vSphere version: vSphere 6.7u3 or later, VMware Cloud on AWS, or Azure VMware Solution account</li><li>One of the following editions: vCenter Standard, vSphere Standard, vCenter Essentials, vSphere Essential, or vSphere Essentials Plus</li><li>A folder in which TCE can place its VMs. To create this, go to the VMs and Templates tab on vCenter, right click on your datacenter, and under New Folder select New VM and Template Folder. Give it a name (I called mine <code>TCEVMFolder</code>).</li></ul><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/vm-folder-creation-1.png" class="kg-image" alt loading="lazy" width="1052" height="851" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/vm-folder-creation-1.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/07/vm-folder-creation-1.png 1000w, https://homelab.acgandhi.com/content/images/2022/07/vm-folder-creation-1.png 1052w" sizes="(min-width: 720px) 720px"><figcaption>Creating the VM folder.</figcaption></figure><ul><li><strong><strong><strong>Optional</strong></strong></strong> (but recommended): A resource pool in which TCE can place VMs. In the Hosts and Clusters tab, right click on the cluster in which you want to deploy TCE, then select New Resource pool. Give it a name (I called mine <code>RpTce</code>), and leave the other settings at their default values.</li></ul><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/rp-creation.png" class="kg-image" alt loading="lazy" width="642" height="458" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/rp-creation.png 600w, https://homelab.acgandhi.com/content/images/2022/07/rp-creation.png 642w"><figcaption>Creating the resource pool.</figcaption></figure><ul><li>Check to make sure the datastore you are planning to use has sufficient storage for the control plane and worker node VMs.</li></ul><p><strong>Network</strong></p><!--kg-card-begin: markdown--><ul>
+<li>
+<p>A DHCP server to connect the cluster node VMs that Tanzu Community Edition deploys. The node VMs must be able to connect to vSphere.</p>
+</li>
+<li>
+<p>A set of available static virtual IP (VIP) addresses for the clusters that you create, one for each management and workload cluster. Each cluster requires a static IP address that is used to access the cluster’s Kubernetes control plane.</p>
+<ul>
+<li>Make sure that these IP addresses are not in the DHCP range, but are in the same subnet as the DHCP range.</li>
+</ul>
+</li>
+<li>
+<p>Make sure that:</p>
+<ul>
+<li>Traffic is allowed out to vCenter Server from the network on which clusters will run.</li>
+<li>Traffic allowed between your local bootstrap machine and port 6443 of all VMs in the clusters you create. Port 6443 is where the Kubernetes API is exposed. In our case, the bootstrap machine will itself be a VM on vSphere.</li>
+<li>Traffic allowed between port 443 of all VMs in the clusters you create and vCenter Server. Port 443 is where the vCenter Server API is exposed.</li>
+</ul>
+</li>
+<li>
+<p>The Network Time Protocol (NTP) service running on all hosts, and the hosts running on UTC.</p>
+</li>
+</ul>
+<!--kg-card-end: markdown--><h3 id="creating-a-template-from-the-node-ova">Creating a template from the node OVA</h3><p>During the jumpbox step you should’ve uploaded the <a href="https://customerconnect.vmware.com/downloads/get-download?downloadGroup=TCE-0120">node image from customer connect</a> to vSphere. Right click on your resource pool for TCE (or if you don’t have one, on the cluster), then select New Virtual Machine. For creation type, select Deploy From Template, then select next. Select the node image OVA you uploaded. Review the details of the template, and accept the license agreement. Select the datastore on which you want TCE to place it’s VMs. Here you can also change the disk format to “Thin Provision” to use less space. Then, select the network on which you want TCE to place its VMs (this does not have to be the same network as the jumpbox). Finally, click on finish.</p><p>Once the VM has finished being created <em><strong>do not</strong> power it on</em>. Right click the VM, and under template select “Convert to Template.” If you go to the VMs and Templates page you should see the template in the folder you selected. </p><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://homelab.acgandhi.com/content/images/2022/07/vm-to-template.png" class="kg-image" alt loading="lazy" width="1023" height="396" srcset="https://homelab.acgandhi.com/content/images/size/w600/2022/07/vm-to-template.png 600w, https://homelab.acgandhi.com/content/images/size/w1000/2022/07/vm-to-template.png 1000w, https://homelab.acgandhi.com/content/images/2022/07/vm-to-template.png 1023w" sizes="(min-width: 720px) 720px"><figcaption>Converting the deployed image to a template.</figcaption></figure><p>You are now ready to deploy vSphere.  In your bootstrap/jumpbox VM as the <em>tceadmin</em> user, execute the following command:</p><figure class="kg-card kg-code-card"><pre><code>tanzu management-cluster create --ui --bind &lt;VM ip here&gt;:8080 --browser none</code></pre><figcaption>Replace <em>&lt;VM ip here&gt;</em> with the IP of the jumpbox VM.</figcaption></figure><p>This will start up the web ui, which you can access on your local machine with the port and IP you specified.</p><p>On the web ui, select vCenter. There are 8 parts to configuring the deployment:</p><ol><li>Enter the credentials for vCenter. <strong>Recommendation:</strong> use the TCE user account created as a part of <a href="https://github.com/cantbewong/k8shomelab/blob/main/tcejumpbox/JUMPBOXVM.md">jumpbox installation instructions</a>.</li><li>Select the number and type of nodes for the management cluster. <strong>Recommendation:</strong> development (single node) cluster of size medium or large for the control plane, and size large for the worker node. Choose smaller instances if your homelab is more resource constrained. Management cluster name can be whatever you want (in my case “manclusname”). Control plane IP should be an available static IP on the same subnet as the rest of the kubernetes network.</li><li>Leave as default (blank), unless using VMware NSX.</li><li>Leave as default (blank)</li><li>If you click on VM folder a dropdown should appear with all of the folders on vSphere. Select the one you created earlier for TCE (in my case TCEVMFolder). Select the datastore you want TCE to place the management cluster VMs on. Select the resource pool you created earlier for TCE (in my case, TceRp).</li><li>Select the network that the management cluster VMs will use. The <em>control plane IP</em> chosen earlier should be contained in this network. Cluster service and pod CIDRs can be left as default (unless you have existing networks that conflict with either).</li><li><strong>Optional:</strong> enter details for OIDC or LDAP. Click on the “Enable Identity Management Settings” toggle if you do not wish to.</li><li>Select the template that was created earlier from the node OVA. </li></ol><p>Once you click on Review Configuration, all of the settings that you entered will show up. At the bottom you can click on Deploy Management Cluster, which will start the deployment process.<br><strong>Optional (alternative method):</strong> Copy the command shown in the CLI command equivalent box.  Stop running the kickstart UI (using ctrl+c). Then paste this command onto the terminal of the jumpbox VM. Here you can customize options of the command, including log verbosity (<code>-v 0-9</code>) and the timeout (<code>--timeout</code> or <code>-t</code>, default 30m, can be increased for slower internet connections). </p><p>Part way through the cluster creation process you should see 2 VMs be created on vSphere, one for the control plane and another for the worker node. Once the installation process is completed, you can run <code>kubectl get all -A</code> to see the pods, services, daemonsets, deployments, and replicasets created by Tanzu, running on the management cluster.</p><p>You are now ready to deploy your first workload.</p>
+    </section>
+
+
+</article>
+</main>
+
+    <section class="footer-cta outer">
+        <div class="inner">
+            <h2 class="footer-cta-title">Sign up for more like this.</h2>
+            <a class="footer-cta-button" href="#/portal" data-portal>
+                <div class="footer-cta-input">Enter your email</div>
+                <span>Subscribe</span>
+            </a>
+        </div>
+    </section>
+
+
+
+            <aside class="read-more-wrap outer">
+                <div class="read-more inner">
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-6-home-automation/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/Z-Wave_logo.svg 300w,
+                    /content/images/size/w600/2022/08/Z-Wave_logo.svg 600w,
+                    /content/images/size/w1000/2022/08/Z-Wave_logo.svg 1000w,
+                    /content/images/size/w2000/2022/08/Z-Wave_logo.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/Z-Wave_logo.svg"
+            alt="Z-Wave logo"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-6-home-automation/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)
+                </h2>
+            </header>
+                <div class="post-card-excerpt">Home automation is one of the key focuses of my project, as it's one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It's also unusual to see Kubernetes handling this; most k8s demos tend to be a bit</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-09-18">Sep 18, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">4 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/install-a-logging-solution-for-a-kubernetes-homelab/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/elk-stack-3-elks-stacked.svg 300w,
+                    /content/images/size/w600/2022/08/elk-stack-3-elks-stacked.svg 600w,
+                    /content/images/size/w1000/2022/08/elk-stack-3-elks-stacked.svg 1000w,
+                    /content/images/size/w2000/2022/08/elk-stack-3-elks-stacked.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/elk-stack-3-elks-stacked.svg"
+            alt="Post 5: Install a logging solution for a Kubernetes homelab"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/install-a-logging-solution-for-a-kubernetes-homelab/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 5: Install a logging solution for a Kubernetes homelab
+                </h2>
+            </header>
+                <div class="post-card-excerpt">Introduction - EfK stack on/for Kubernetes
+
+Observability is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-23">Aug 23, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">5 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-4-harbor-container-registry/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/harbor-horizontal-color.png 300w,
+                    /content/images/size/w600/2022/08/harbor-horizontal-color.png 600w,
+                    /content/images/size/w1000/2022/08/harbor-horizontal-color.png 1000w,
+                    /content/images/size/w2000/2022/08/harbor-horizontal-color.png 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/harbor-horizontal-color.png"
+            alt="Harbor Log"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-4-harbor-container-registry/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 4: Harbor Container Registry
+                </h2>
+            </header>
+                <div class="post-card-excerpt">What is Harbor?
+
+Harbor is a container registry, i.e. a system which manages container images which can then be used by Kubernetes. It is a self-hosted alternative to a cloud based service like Docker Hub.
+
+
+Why do we want to use Harbor (vs a cloud registry like Docker Hub)</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-22">Aug 22, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">5 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                </div>
+            </aside>
+
+
+
+    </div>
+
+    <footer class="site-footer outer">
+        <div class="inner">
+            <section class="copyright"><a href="https://homelab.acgandhi.com">Tanzu Personal Homelab</a> &copy; 2022</section>
+            <nav class="site-footer-nav">
+                <ul class="nav">
+    <li class="nav-sign-up"><a href="#/portal/">Sign up</a></li>
+</ul>
+
+            </nav>
+            <div><a href="https://ghost.org/" target="_blank" rel="noopener">Powered by Ghost</a></div>
+        </div>
+    </footer>
+
+</div>
+
+
+<script
+    src="https://code.jquery.com/jquery-3.5.1.min.js"
+    integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0="
+    crossorigin="anonymous">
+</script>
+<script src="/assets/built/casper.js?v=1bb11d963f"></script>
+<script>
+$(document).ready(function () {
+    // Mobile Menu Trigger
+    $('.gh-burger').click(function () {
+        $('body').toggleClass('gh-head-open');
+    });
+    // FitVids - Makes video embeds responsive
+    $(".gh-content").fitVids();
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js" integrity="sha512-9khQRAUBYEJDCDVP2yw3LRUQvjJ0Pjx0EShmaQjcHa6AXiOv6qHQu9lCAIR8O+/D8FtaCoJ2c0Tf9Xo7hYH01Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js" integrity="sha512-fTl/qcO1VgvKtOMApX2PdZzkziyr2stM65GYPLGuYMnuMm1z2JLJG6XVU7C/mR+E7xBUqCivykuhlzfqxXBXbg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.js" integrity="sha512-6nsaJ4jytF/0bh+5QJY4SOLuZZmcd/TAXHBkLIX/SH1ENpWezpQDJ4LpK2D1IfpjKVyhJQQaNSSvfsQjuYfTow==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en" class="auto-color">
+<head>
+
+    <title>Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)</title>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/built/screen.css?v=1bb11d963f" />
+
+    <link rel="canonical" href="https://homelab.acgandhi.com/post-6-home-automation/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <meta property="og:site_name" content="Tanzu Personal Homelab" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)" />
+    <meta property="og:description" content="Home automation is one of the key focuses of my project, as it&#x27;s one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It&#x27;s also unusual to see Kubernetes handling this; most k8s demos tend to be a bit" />
+    <meta property="og:url" content="https://homelab.acgandhi.com/post-6-home-automation/" />
+    <meta property="og:image" content="https://homelab.acgandhi.com/content/images/2022/08/Z-Wave_logo.svg" />
+    <meta property="article:published_time" content="2022-09-18T09:04:15.000Z" />
+    <meta property="article:modified_time" content="2022-09-18T09:04:15.000Z" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)" />
+    <meta name="twitter:description" content="Home automation is one of the key focuses of my project, as it&#x27;s one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It&#x27;s also unusual to see Kubernetes handling this; most k8s demos tend to be a bit" />
+    <meta name="twitter:url" content="https://homelab.acgandhi.com/post-6-home-automation/" />
+    <meta name="twitter:image" content="https://homelab.acgandhi.com/content/images/2022/08/Z-Wave_logo.svg" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Amar Gandhi" />
+    <meta property="og:image:width" content="256" />
+    <meta property="og:image:height" content="114" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Tanzu Personal Homelab",
+        "url": "https://homelab.acgandhi.com/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://homelab.acgandhi.com/favicon.ico"
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Amar Gandhi",
+        "image": {
+            "@type": "ImageObject",
+            "url": "https://homelab.acgandhi.com/content/images/2022/07/Untitled.jpg",
+            "width": 510,
+            "height": 509
+        },
+        "url": "https://homelab.acgandhi.com/author/acgandhi/",
+        "sameAs": []
+    },
+    "headline": "Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)",
+    "url": "https://homelab.acgandhi.com/post-6-home-automation/",
+    "datePublished": "2022-09-18T09:04:15.000Z",
+    "dateModified": "2022-09-18T09:04:15.000Z",
+    "image": {
+        "@type": "ImageObject",
+        "url": "https://homelab.acgandhi.com/content/images/2022/08/Z-Wave_logo.svg",
+        "width": 256,
+        "height": 114
+    },
+    "description": "Home automation is one of the key focuses of my project, as it&#x27;s one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It&#x27;s also unusual to see Kubernetes handling this; most k8s demos tend to be a bit more focused on webservers or enterprise software.\n\nFor my lab I&#x27;ll be using a Z-Wave USB dongle to communicate with Z-Wave smart devices. The stick is plugged into a Raspberry Pi, which will talk via MQTT to Home Assistant running on Ku",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://homelab.acgandhi.com/"
+    }
+}
+    </script>
+
+    <meta name="generator" content="Ghost 5.4" />
+    <link rel="alternate" type="application/rss+xml" title="Tanzu Personal Homelab" href="https://homelab.acgandhi.com/rss/" />
+    <script defer src="https://unpkg.com/@tryghost/portal@~2.3.0/umd/portal.min.js" data-ghost="https://homelab.acgandhi.com/" data-key="afcfa8006057ffdaa5f94c25ab" data-api="https://homelab.acgandhi.com/ghost/api/content/" crossorigin="anonymous"></script><style id="gh-members-styles">.gh-post-upgrade-cta-content,
+.gh-post-upgrade-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    text-align: center;
+    width: 100%;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.gh-post-upgrade-cta-content {
+    border-radius: 8px;
+    padding: 40px 4vw;
+}
+
+.gh-post-upgrade-cta h2 {
+    color: #ffffff;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+    margin: 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta p {
+    margin: 20px 0 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta small {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+}
+
+.gh-post-upgrade-cta a {
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a:hover {
+    color: #ffffff;
+    opacity: 0.8;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a.gh-btn {
+    display: block;
+    background: #ffffff;
+    text-decoration: none;
+    margin: 28px 0 0;
+    padding: 8px 18px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.gh-post-upgrade-cta a.gh-btn:hover {
+    opacity: 0.92;
+}</style>
+    <script defer src="https://unpkg.com/@tryghost/sodo-search@~1.0.0/umd/sodo-search.min.js" data-sodo-search="https://homelab.acgandhi.com/" data-version="1.0.0" data-key="afcfa8006057ffdaa5f94c25ab" crossorigin="anonymous"></script>
+    <script defer src="/public/cards.min.js?v=1bb11d963f"></script>
+    <link rel="stylesheet" type="text/css" href="/public/cards.min.css?v=1bb11d963f">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.css" integrity="sha512-EgIkdlA87NL5dPmI6HztTCpg7XKfZRFQHbpEdDF3hCT45HjjmIJOx8K73r+YZha0vKyOcMpzC7fZ4RajCX25tg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1.9.0/themes/prism-nord.min.css" integrity="sha256-TYVlEye0UX2UYZXVmmY5XzlUoLuncTy6j+aq5bqZm8g=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.css" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+    /* Margin after figures with caption? */
+    .gh-content .kg-card+:not(.kg-card), .gh-content :not(.kg-card):not([id])+.kg-card {
+        margin-top: 3vmin;
+    }
+    
+	/* Figure Captions */
+    figcaption {
+        font-size: 1.4rem;
+        line-height: 1.5em;
+        padding-top: 1rem;
+        color: #505050;
+    }    
+    /* Code cards */
+    ::selection {
+        color: var(--color-darkgrey) !important;
+    }
+    
+    figure.kg-code-card, .code-toolbar {
+        margin-top: 8px !important;
+    }
+    figure.kg-card.kg-code-card.kg-width-wide {
+        max-width: 90vw; /* hack */
+    }
+    .token.comment {
+		color: #9aa3b6;
+    }
+    span.command-line-prompt {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+	span.command-line-prompt > span {
+        color: #a3fffd;
+        opacity: 1.0;
+    }
+</style><style>:root {--ghost-accent-color: #29B6F6;}</style>
+
+</head>
+<body class="post-template has-sans-body">
+<div class="viewport">
+
+    <header id="gh-head" class="gh-head outer">
+        <nav class="gh-head-inner inner">
+
+            <div class="gh-head-brand">
+                <a class="gh-head-logo no-image" href="https://homelab.acgandhi.com">
+                        Tanzu Personal Homelab
+                </a>
+                <div class="gh-head-brand-wrapper">
+                    <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                    <a class="gh-burger" role="button">
+                        <div class="gh-burger-box">
+                            <div class="gh-burger-inner"></div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            <div class="gh-head-menu">
+                <ul class="nav">
+    <li class="nav-home"><a href="https://homelab.acgandhi.com/">Home</a></li>
+    <li class="nav-about"><a href="https://homelab.acgandhi.com/about/">About</a></li>
+</ul>
+
+            </div>
+            <div class="gh-head-actions">
+                <button class="gh-search" data-ghost-search><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg></button>
+                <div class="gh-social">
+                </div>
+                        <a class="gh-head-button" href="#/portal/signup" data-portal="signup">Subscribe</a>
+            </div>
+        </nav>
+    </header>
+
+    <div class="site-content">
+        
+
+
+
+<main id="site-main" class="site-main">
+<article class="article post image-small">
+
+    <header class="article-header gh-canvas">
+
+        <div class="article-tag post-card-tags">
+        </div>
+
+        <h1 class="article-title">Post 6: Controlling a Smart Outlet with Kubernetes (Z-Wave + Home Assistant)</h1>
+
+
+        <div class="article-byline">
+        <section class="article-byline-content">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+                    <a href="/author/acgandhi/" class="author-avatar">
+                        <img class="author-profile-image" src="/content/images/size/w100/2022/07/Untitled.jpg" alt="Amar Gandhi" />
+                    </a>
+                </li>
+            </ul>
+
+            <div class="article-byline-meta">
+                <h4 class="author-name"><a href="/author/acgandhi/">Amar Gandhi</a></h4>
+                <div class="byline-meta-content">
+                    <time class="byline-meta-date" datetime="2022-09-18">Sep 18, 2022</time>
+                        <span class="byline-reading-time"><span class="bull">&bull;</span> 4 min read</span>
+                </div>
+            </div>
+
+        </section>
+        </div>
+
+            <figure class="article-image">
+                <img
+                    srcset="/content/images/size/w300/2022/08/Z-Wave_logo.svg 300w,
+                            /content/images/size/w600/2022/08/Z-Wave_logo.svg 600w,
+                            /content/images/size/w1000/2022/08/Z-Wave_logo.svg 1000w,
+                            /content/images/size/w2000/2022/08/Z-Wave_logo.svg 2000w"
+                    sizes="(min-width: 1400px) 1400px, 92vw"
+                    src="/content/images/size/w2000/2022/08/Z-Wave_logo.svg"
+                    alt="Z-Wave logo"
+                />
+            </figure>
+
+    </header>
+
+    <section class="gh-content gh-canvas">
+        <p>Home automation is one of the key focuses of my project, as it's one of the areas where privacy and security matter the most but also an area where many consumer devices skimp on. It's also unusual to see Kubernetes handling this; most k8s demos tend to be a bit more focused on webservers or enterprise software.</p><p>For my lab I'll be using a <strong>Z-Wave USB dongle</strong> to communicate with Z-Wave smart devices. The stick is plugged into a <strong>Raspberry Pi</strong>, which will talk via <strong>MQTT </strong>to <strong>Home Assistant</strong> running on Kubernetes, an application which provides an easy to use web dashboard. The setup is summed up by this diagram:</p><figure class="kg-card kg-image-card"><img src="https://homelab.acgandhi.com/content/images/2022/08/zwave-diagram.svg" class="kg-image" alt loading="lazy"></figure><h2 id="setting-up-the-raspberry-pi">Setting up the Raspberry pi</h2><!--kg-card-begin: html--><ol start="1">
+    <li>Set up the Raspberry Pi with an OS of your choice. In my case I'm using <a href="https://ubuntu.com/raspberry-pi/server">Ubuntu Server for Raspberry Pi</a>. Set the server to use a static IP, and optionally you can also set up a DNS resolver entry for the Pi in your router.</li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="2">
+    <li>Install Docker on the Pi. You can do so easily with the following script (Ubuntu specific, for <a href="https://docs.docker.com/engine/install/#server">other distros see the docker website</a>):</li>
+</ol><!--kg-card-end: html--><pre><code class="language-bash"># Remove old docker if it exists
+sudo apt-get remove docker docker-engine docker.io containerd runc
+# Update dependencies
+sudo apt update
+sudo apt install -y apt-transport-https ca-certificates curl gnupg software-properties-common
+# Docker repo key
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list &gt; /dev/null
+# Install Docker latest runtime
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli docker-compose-plugin
+# Add current user to docker group (so you can use docker without sudo)
+sudo groupadd docker
+sudo usermod -aG docker $USER</code></pre><!--kg-card-begin: html--><ol start="3">
+    <li>Plug in your zwave usb dongle. </li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="4">
+    <li>Find the id of the serial device you just plugged in. You can list all serial devices using <code>ls /dev/serial/by-id/</code>.</li>
+</ol><!--kg-card-end: html--><!--kg-card-begin: html--><ol start="5">
+    <li>Create a docker-compose file for zwavejs2mqtt:</li>
+</ol><!--kg-card-end: html--><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; docker-compose.yml
+version: '3.7'
+services:
+  zwavejs2mqtt:
+    container_name: zwavejs2mqtt
+    image: zwavejs/zwavejs2mqtt:latest
+    restart: always
+    tty: true
+    stop_signal: SIGINT
+    environment:
+      - SESSION_SECRET=mysupersecretkey
+      - ZWAVEJS_EXTERNAL_CONFIG=/usr/src/app/store/.config-db
+      # Uncomment if you want logs time and dates to match your timezone instead of UTC
+      # Available at https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+      # - TZ=America/Los_Angeles
+    networks:
+      - zwave
+    devices:
+      # Do not use /dev/ttyUSBX serial devices, as those mappings can change over time.
+      # Instead, use the /dev/serial/by-id/X serial device for your Z-Wave stick.
+      - '/dev/serial/by-id/insert_stick_reference_here:/dev/zwave'
+    volumes:
+      - zwave-config:/usr/src/app/store
+    ports:
+      - '8091:8091' # port for web interface
+      - '3000:3000' # port for Z-Wave JS websocket server
+      - '1883:1883' # mqtt
+networks:
+  zwave:
+volumes:
+  zwave-config:
+    name: zwave-config
+EOF</code></pre><figcaption>Replace <em>mysupersecretkey</em> with a key of your choice. You can generate one easily using openssl: <code>openssl rand -hex 15</code>. Replace <em>insert_stick_reference_here</em> with the id from step 4.&nbsp;</figcaption></figure><!--kg-card-begin: html--><ol start="6">
+    <li>Start the container:</li>
+</ol><!--kg-card-end: html--><pre><code class="language-bash">docker compose up</code></pre><h2 id="deploying-home-assistant">Deploying home assistant </h2><p>Over on the jumpbox machine, add the <code>k8s-at-home</code> helm repository (if you haven't done so already).</p><pre><code class="language-text">helm repo add k8s-at-home https://k8s-at-home.com/charts/</code></pre><p>Create a values file:</p><figure class="kg-card kg-code-card"><pre><code class="language-yaml">cat &lt;&lt;EOF &gt; home-assistant-values.yaml
+env:
+  TZ: America/Los Angeles
+service:
+  main:
+    type: LoadBalancer
+persistence:
+  config:
+    enabled: true
+EOF</code></pre><figcaption>Replace TZ with the timezone of your choice. A full list can be found here: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones</figcaption></figure><p>Then install: </p><pre><code class="language-text">helm install home-assistant k8s-at-home/home-assistant -f home-assistant-values.yaml</code></pre><h2 id="installing-mosquitto-mqtt">Installing Mosquitto MQTT</h2><p>Create a values file:</p><figure class="kg-card kg-code-card"><pre><code class="language-text">cat &lt;&lt;EOF &gt; mqtt-values.yaml
+env:
+  TZ: America/Los Angeles
+service:
+  main:
+    type: LoadBalancer</code></pre><figcaption>Replace <em>TZ</em> with the timezone of your choice.</figcaption></figure><p>Install the helm chart.</p><pre><code class="language-text">helm install mosquitto k8s-at-home/mosquitto</code></pre><p>Now get the external IP address of the LoadBalancer service:</p><!--kg-card-begin: html--><figure class="kg-card kg-code-card kg-width-wide">
+    <pre class="command-line" data-user="tceadmin" data-host="jumpbox" data-output="2-3">
+<code class="language-command-line">kubectl get svc mosquitto
+NAME        TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)          AGE
+mosquitto   LoadBalancer   100.69.203.75   192.168.30.213   1883:30582/TCP   62d</code></pre>
+</figure><!--kg-card-end: html--><p>The mqtt broker will be running at <code><em>externalIP</em>:1883</code>.</p><h2 id="setting-up-zwavejstomqtt">Setting up zwavejstomqtt</h2><p>Open the web ui at <code><em>&lt;raspberrypi ip&gt;</em>:8091</code>. Configure the following:</p><ol><li>Set serial port to <code>/dev/zwave</code> under Settings → Zwave → Serial Port (this is where docker mounts the USB stick). </li><li>Create network security keys under Settings → Zwave → Security Keys (S0 Legacy, S2 Unauthenticated, S2 Authenticated, and S2 Access Control). You can use the generate button (two arrows in each text box) to generate them for you.</li><li>Under Settings → MQTT, add the MQTT information from earlier. For <code>Host url</code> use the LoadBalancer external IP, and for port use 1883.</li><li>Under Settings → Home Assistant, enable MQTT Discovery.</li></ol><h3 id="adding-a-device-to-zwavejstomqtt">Adding a device to zwavejstomqtt</h3><p>Under the "Smart Start" tab, click on the + icon in the bottom right. If your Zwave device has a QR code on the side you can use the add using QR code option. Click on the option, grant the website camera access, and scan the QR code with your computer's webcam (or scan the info with your phones webcam and type it in manually). If your device does not have a QR code you can also add it manually using the DSK. </p><p>On the Control Panel page you should see a second device (with the first being the USB stick itself). If you click the device you should be able to control it, as well as query its data if it presents any. For example, for the smart outlet I have configured I can look at the historical power usage.</p><h2 id="adding-mqtt-to-home-assistant">Adding MQTT to Home Assistant </h2><p>Under Settings → Devices and Services → Add Integration (bottom right button), search for MQTT. Add the integration. Configure with the IP and port of the MQTT broker. Finally, go back to the dashboard. The added device should be visible.</p><h2 id="conclusion">Conclusion</h2><p>Bit of a long article, but we configured a number services across different machines. Hopefully this helps you on your Kubernetes edge journey!</p>
+    </section>
+
+
+</article>
+</main>
+
+    <section class="footer-cta outer">
+        <div class="inner">
+            <h2 class="footer-cta-title">Sign up for more like this.</h2>
+            <a class="footer-cta-button" href="#/portal" data-portal>
+                <div class="footer-cta-input">Enter your email</div>
+                <span>Subscribe</span>
+            </a>
+        </div>
+    </section>
+
+
+
+            <aside class="read-more-wrap outer">
+                <div class="read-more inner">
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/install-a-logging-solution-for-a-kubernetes-homelab/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/elk-stack-3-elks-stacked.svg 300w,
+                    /content/images/size/w600/2022/08/elk-stack-3-elks-stacked.svg 600w,
+                    /content/images/size/w1000/2022/08/elk-stack-3-elks-stacked.svg 1000w,
+                    /content/images/size/w2000/2022/08/elk-stack-3-elks-stacked.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/elk-stack-3-elks-stacked.svg"
+            alt="Post 5: Install a logging solution for a Kubernetes homelab"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/install-a-logging-solution-for-a-kubernetes-homelab/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 5: Install a logging solution for a Kubernetes homelab
+                </h2>
+            </header>
+                <div class="post-card-excerpt">Introduction - EfK stack on/for Kubernetes
+
+Observability is a function that allows developers and operators to identify problems where and when they happen across multi-node systems. Proper instrumentation enables you to aggregate metrics, traces, logs and events from a distributed system and correlate them across various application components and</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-23">Aug 23, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">5 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-4-harbor-container-registry/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/harbor-horizontal-color.png 300w,
+                    /content/images/size/w600/2022/08/harbor-horizontal-color.png 600w,
+                    /content/images/size/w1000/2022/08/harbor-horizontal-color.png 1000w,
+                    /content/images/size/w2000/2022/08/harbor-horizontal-color.png 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/harbor-horizontal-color.png"
+            alt="Harbor Log"
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-4-harbor-container-registry/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 4: Harbor Container Registry
+                </h2>
+            </header>
+                <div class="post-card-excerpt">What is Harbor?
+
+Harbor is a container registry, i.e. a system which manages container images which can then be used by Kubernetes. It is a self-hosted alternative to a cloud based service like Docker Hub.
+
+
+Why do we want to use Harbor (vs a cloud registry like Docker Hub)</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-22">Aug 22, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">5 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                        
+<article class="post-card post keep-ratio">
+
+    <a class="post-card-image-link" href="/post-3-https-public-ghost/">
+
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2022/08/kubernetes-internet.svg 300w,
+                    /content/images/size/w600/2022/08/kubernetes-internet.svg 600w,
+                    /content/images/size/w1000/2022/08/kubernetes-internet.svg 1000w,
+                    /content/images/size/w2000/2022/08/kubernetes-internet.svg 2000w"
+            sizes="(max-width: 1000px) 400px, 800px"
+            src="/content/images/size/w600/2022/08/kubernetes-internet.svg"
+            alt="Kubernetes logo with back and forth arrows to the internet."
+            loading="lazy"
+        />
+
+
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/post-3-https-public-ghost/">
+            <header class="post-card-header">
+                <div class="post-card-tags">
+                </div>
+                <h2 class="post-card-title">
+                    Post 3: Exposing Kubernetes to the internet with Cloudflare tunnels
+                </h2>
+            </header>
+                <div class="post-card-excerpt">In the last post we deployed Ghost, a content management system for a blog. In this article we'll be discussing ways to expose our blog to the internet.
+
+The traditional way to expose something running on a home network to the internet would be to punch a hole through the</div>
+        </a>
+
+        <footer class="post-card-meta">
+            <time class="post-card-meta-date" datetime="2022-08-15">Aug 15, 2022</time>
+                <span class="sep">—</span>
+                <span class="post-card-meta-length">6 min read</span>
+        </footer>
+
+    </div>
+
+</article>
+                </div>
+            </aside>
+
+
+
+    </div>
+
+    <footer class="site-footer outer">
+        <div class="inner">
+            <section class="copyright"><a href="https://homelab.acgandhi.com">Tanzu Personal Homelab</a> &copy; 2022</section>
+            <nav class="site-footer-nav">
+                <ul class="nav">
+    <li class="nav-sign-up"><a href="#/portal/">Sign up</a></li>
+</ul>
+
+            </nav>
+            <div><a href="https://ghost.org/" target="_blank" rel="noopener">Powered by Ghost</a></div>
+        </div>
+    </footer>
+
+</div>
+
+
+<script
+    src="https://code.jquery.com/jquery-3.5.1.min.js"
+    integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0="
+    crossorigin="anonymous">
+</script>
+<script src="/assets/built/casper.js?v=1bb11d963f"></script>
+<script>
+$(document).ready(function () {
+    // Mobile Menu Trigger
+    $('.gh-burger').click(function () {
+        $('body').toggleClass('gh-head-open');
+    });
+    // FitVids - Makes video embeds responsive
+    $(".gh-content").fitVids();
+});
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/components/prism-core.min.js" integrity="sha512-9khQRAUBYEJDCDVP2yw3LRUQvjJ0Pjx0EShmaQjcHa6AXiOv6qHQu9lCAIR8O+/D8FtaCoJ2c0Tf9Xo7hYH01Q==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/autoloader/prism-autoloader.min.js" integrity="sha512-fTl/qcO1VgvKtOMApX2PdZzkziyr2stM65GYPLGuYMnuMm1z2JLJG6XVU7C/mR+E7xBUqCivykuhlzfqxXBXbg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.28.0/plugins/command-line/prism-command-line.min.js" integrity="sha512-6nsaJ4jytF/0bh+5QJY4SOLuZZmcd/TAXHBkLIX/SH1ENpWezpQDJ4LpK2D1IfpjKVyhJQQaNSSvfsQjuYfTow==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/toolbar/prism-toolbar.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+
+</body>
+</html>
